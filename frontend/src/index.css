@@ -1,0 +1,25 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #0b0f14;
+  --color-surface: #121821;
+  --color-surface-hover: #182130;
+  --color-border: #223044;
+  --color-text: #e7edf5;
+  --color-text-muted: #8ea0b8;
+  --color-accent: #3ea6ff;
+  --color-buy: #22c55e;
+  --color-sell: #ef4444;
+  --color-hold: #94a3b8;
+  --color-clause: #a855f7;
+  --color-trading: #f59e0b;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-text);
+}

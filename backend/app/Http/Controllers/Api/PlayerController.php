@@ -1,0 +1,557 @@
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use App\Http\Resources\FantasyPlayerResource;
+use App\Models\FantasyAccount;
+use App\Models\FantasyExternalTrend;
+use App\Models\FantasyLeague;
+use App\Models\FantasyMarketPlayer;
+use App\Models\FantasyPlayer;
+use App\Models\FantasyTeam;
+use App\Models\FantasyTeamPlayer;
+use App\Services\ExternalData\SparklineHistoryBuilder;
+use App\Services\Recommendation\ClauseEconomicAnalysisService;
+use App\Services\Recommendation\MarketAuctionPremiumEstimator;
+use App\Services\Recommendation\MarketBuyAnalysisService;
+use App\Services\Recommendation\PlayerDecisionEngine;
+use App\Services\Recommendation\PlayerTrendPresenter;
+use App\Services\Recommendation\PlayerValueTrendCalculator;
+use App\Services\Recommendation\ValueObjects\ClauseEconomicAnalysis;
+use App\Services\Recommendation\ValueObjects\MarketBuyAnalysis;
+use App\Services\Recommendation\ValueObjects\PlayerDecisionResult;
+use Illuminate\Http\Request;
+
+class PlayerController extends Controller
+{
+    /** How far back the value chart goes. */
+    private const HISTORY_WINDOW_DAYS = 30;
+
+    /** How many economic alternatives the detail page shows. */
+    private const ALTERNATIVES_LIMIT = 4;
+
+    public function index(Request $request, PlayerTrendPresenter $presenter)
+    {
+        $account = $this->currentAccount($request);
+        $query = FantasyPlayer::query();
+
+        if ($position = $request->query('position')) {
+            $query->where('position', $position);
+        }
+        if ($club = $request->query('club')) {
+            $query->where('club_name', 'ilike', "%{$club}%");
+        }
+        if ($search = $request->query('search')) {
+            $query->where('name', 'ilike', "%{$search}%");
+        }
+
+        $players = $query->orderBy('name')->paginate(min((int) $request->query('per_page', 50), 200));
+        $playerIds = $players->getCollection()->pluck('id');
+
+        $externalTrends = FantasyExternalTrend::where('source', 'futbolfantasy')
+            ->whereIn('fantasy_player_id', $playerIds)
+            ->get()
+            ->keyBy('fantasy_player_id');
+
+        // Latest team_players row per player (a player only ever belongs to
+        // one active roster at a time in this MVP's single-league scope) —
+        // same "who owns this, and what's their clause" the Market/Clauses
+        // screens already read, just fetched in bulk for a paginated list.
+        $ownerships = FantasyTeamPlayer::whereIn('fantasy_player_id', $playerIds)
+            ->with('team')
+            ->get()
+            ->groupBy('fantasy_player_id')
+            ->map(fn ($rows) => $rows->sortByDesc('id')->first());
+
+        $players->getCollection()->transform(function (FantasyPlayer $player) use ($account, $presenter, $externalTrends, $ownerships) {
+            $externalTrend = $externalTrends->get($player->id);
+            $p = $presenter->present($player, $account, $externalTrend);
+            $teamPlayer = $ownerships->get($player->id);
+            $owner = $teamPlayer?->team;
+
+            return array_merge((new FantasyPlayerResource($player))->resolve(), [
+                'fantasyScore' => $p->score->total,
+                'trend' => $p->trend->toArray(),
+                'externalTrend' => $p->externalTrendPayload(),
+                'history' => $p->history,
+                'historySource' => $p->historySource,
+                'owner' => $owner ? ['name' => $owner->manager_name ?: $owner->name, 'isMine' => $owner->is_mine] : null,
+                'clauseValue' => $teamPlayer?->clause_value,
+            ]);
+        });
+
+        return response()->json($players);
+    }
+
+    /**
+     * The unified player detail screen — one endpoint, but what it returns
+     * under `decision` and `alternatives` depends entirely on `context`:
+     *
+     * - OWNED_BY_ME: PlayerDecisionEngine's roster verdict (HOLD/SELL/LOCK_CLAUSE),
+     *   the same one /team reads — never re-derived here.
+     * - ON_MARKET: MarketBuyAnalysisService's buy verdict, the same one
+     *   /market and "Avui" read.
+     * - OWNED_BY_RIVAL (with a clause): ClauseEconomicAnalysisService's
+     *   verdict, the same one /clauses reads.
+     * - FREE: no active engine applies — `decision` is null.
+     *
+     * `favors`/`risks` are the one genuinely new piece of logic here: short
+     * deterministic bullets thresholded off each engine's *own* already-computed
+     * numbers (ROI, break-even, growth deceleration, premium, ...) — never a
+     * second economic formula, and never sporting signals (points, starter
+     * status, calendar) inside an economic verdict.
+     */
+    public function show(
+        Request $request,
+        FantasyPlayer $player,
+        PlayerTrendPresenter $presenter,
+        SparklineHistoryBuilder $historyBuilder,
+        PlayerDecisionEngine $decisionEngine,
+        MarketBuyAnalysisService $buyAnalysisService,
+        MarketAuctionPremiumEstimator $premiumEstimator,
+        PlayerValueTrendCalculator $trendCalculator,
+        ClauseEconomicAnalysisService $clauseAnalysisService,
+    ) {
+        $account = $this->currentAccount($request);
+        $league = $account->activeLeague;
+        $externalTrend = FantasyExternalTrend::where('fantasy_player_id', $player->id)->where('source', 'futbolfantasy')->first();
+        $p = $presenter->present($player, $account, $externalTrend);
+
+        $teamPlayer = FantasyTeamPlayer::where('fantasy_player_id', $player->id)->latest('id')->first();
+        $owner = $teamPlayer?->team;
+
+        $listing = $league
+            ? FantasyMarketPlayer::where('fantasy_league_id', $league->id)
+                ->where('fantasy_player_id', $player->id)
+                ->where('is_on_market', true)
+                ->first()
+            : null;
+
+        $context = $this->ownershipContext($owner, $listing);
+
+        $decision = match ($context) {
+            'OWNED_BY_ME' => $this->rosterDecision($account, $player, $decisionEngine),
+            'ON_MARKET' => $this->buyDecision($player, $listing, $league, $trendCalculator, $premiumEstimator, $buyAnalysisService, $externalTrend),
+            'OWNED_BY_RIVAL' => $teamPlayer?->clause_value !== null
+                ? $this->clauseDecision($player, $teamPlayer, $trendCalculator, $clauseAnalysisService, $externalTrend)
+                : null,
+            default => null,
+        };
+
+        // Bounded to the chart window — fantasy_player_snapshots only starts
+        // accumulating the day an account connects, so a freshly-connected
+        // account falls back to futbolfantasy's day-offset values (same
+        // unofficial source as the "7d ext." figures elsewhere) rather than
+        // showing a near-empty chart. See SparklineHistoryBuilder.
+        $ownSnapshots = $player->snapshots()
+            ->whereNotNull('market_value')
+            ->where('captured_at', '>=', now()->subDays(self::HISTORY_WINDOW_DAYS))
+            ->orderBy('captured_at')
+            ->get(['market_value', 'points', 'average_points', 'captured_at']);
+
+        $ownHistory = $ownSnapshots->map(fn ($s) => ['value' => $s->market_value, 'capturedAt' => $s->captured_at->toIso8601String()]);
+
+        [$historyPoints, $historySource] = $historyBuilder->build($ownHistory, $externalTrend, $player->market_value ?? 0, dayOffsets: [30, 14, 7, 3, 1]);
+
+        if ($historySource === 'own') {
+            $history = $ownSnapshots->map(fn ($s) => [
+                'capturedAt' => $s->captured_at->toIso8601String(),
+                'marketValue' => $s->market_value,
+                'points' => $s->points,
+                'averagePoints' => $s->average_points !== null ? (float) $s->average_points : null,
+            ]);
+        } else {
+            // Only the value is available from futbolfantasy — no points/averagePoints history there.
+            $history = collect($historyPoints)->map(fn ($pt) => [
+                'capturedAt' => $pt['capturedAt'],
+                'marketValue' => $pt['value'],
+                'points' => null,
+                'averagePoints' => null,
+            ]);
+        }
+
+        $marketValue = $player->market_value ?? 0;
+        $clauseValue = $teamPlayer?->clause_value;
+        $lockedUntil = $teamPlayer?->clause_locked_until;
+
+        return response()->json([
+            'player' => (new FantasyPlayerResource($player))->resolve(),
+            'context' => $context,
+            'trend' => $p->trend->toArray(),
+            // Unofficial, from futbolfantasy.com — see FutbolFantasySyncService. Informational only.
+            'externalTrend' => $p->externalTrendPayload(),
+            'fantasyScore' => $p->score->toArray(),
+            'history' => $history,
+            'historySource' => $historySource,
+            'weekPoints' => $this->weekPoints($player),
+            'owner' => $owner ? ['name' => $owner->manager_name ?: $owner->name, 'isMine' => $owner->is_mine] : null,
+            'clauseValue' => $clauseValue,
+            'clausePremiumPct' => ($clauseValue !== null && $marketValue > 0) ? ($clauseValue - $marketValue) / $marketValue : null,
+            'clauseLockedUntil' => $lockedUntil?->toIso8601String(),
+            'isClauseLocked' => $lockedUntil !== null && $lockedUntil->isFuture(),
+            'listing' => $listing ? ['expiresAt' => $listing->expires_at?->toIso8601String(), 'askingPrice' => $listing->asking_price] : null,
+            // The decision the relevant engine reached, plus the deterministic
+            // favors/risks bullets and the full raw analysis (for "Veure càlcul").
+            'decision' => $decision,
+            'projections' => $decision['projections'] ?? null,
+            'alternatives' => $this->economicAlternatives($player, $league, $trendCalculator, $premiumEstimator, $buyAnalysisService),
+            'lastUpdatedAt' => $account->last_synced_at?->toIso8601String(),
+        ]);
+    }
+
+    /**
+     * OWNED_BY_ME takes priority over ON_MARKET (can't buy your own player);
+     * otherwise a listing beats plain rival ownership since it's what's
+     * actually actionable right now.
+     */
+    private function ownershipContext(?FantasyTeam $owner, ?FantasyMarketPlayer $listing): string
+    {
+        if ($owner?->is_mine) {
+            return 'OWNED_BY_ME';
+        }
+        if ($listing) {
+            return 'ON_MARKET';
+        }
+        if ($owner) {
+            return 'OWNED_BY_RIVAL';
+        }
+
+        return 'FREE';
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function rosterDecision(FantasyAccount $account, FantasyPlayer $player, PlayerDecisionEngine $decisionEngine): array
+    {
+        // Same call TeamController makes for the whole roster — reused
+        // as-is rather than adding a single-player entry point, since a
+        // detail-page view isn't a hot path and this never recomputes
+        // anything the engine doesn't already do for /team.
+        $decision = $decisionEngine->evaluateRoster($account)->get($player->id);
+
+        if (! $decision) {
+            return ['type' => 'ROSTER', 'action' => null, 'mainScore' => null, 'confidence' => null, 'reason' => null, 'favors' => [], 'risks' => [], 'raw' => null, 'projections' => null];
+        }
+
+        $mainScore = match ($decision->action) {
+            'SELL' => $decision->adjustedSellScore,
+            'LOCK_CLAUSE' => $decision->clauseScore,
+            default => $decision->holdScore,
+        };
+
+        ['favors' => $favors, 'risks' => $risks] = $this->rosterFavorsRisks($decision);
+
+        return [
+            'type' => 'ROSTER',
+            'action' => $decision->action,
+            'mainScore' => $mainScore,
+            'confidence' => $decision->confidence,
+            'reason' => $decision->reason,
+            'favors' => $favors,
+            'risks' => $risks,
+            'raw' => $decision->toArray(),
+            'projections' => ($decision->trade['projectedValue7d'] ?? null) !== null
+                ? ['value3d' => null, 'value7d' => $decision->trade['projectedValue7d'], 'value14d' => null]
+                : null,
+        ];
+    }
+
+    /**
+     * @return array{favors: array<int, string>, risks: array<int, string>}
+     */
+    private function rosterFavorsRisks(PlayerDecisionResult $decision): array
+    {
+        $favors = [];
+        $risks = [];
+        $trade = $decision->trade;
+        $metrics = $decision->metrics;
+        $timing = $decision->clauseTiming;
+
+        if ($decision->action === 'SELL') {
+            if (($trade['currentOffer'] ?? null) !== null && ($trade['projectedValue7d'] ?? null) !== null && $trade['currentOffer'] > $trade['projectedValue7d']) {
+                $favors[] = sprintf("L'oferta actual supera el valor projectat a 7 dies en %s.", $this->formatMoney($trade['currentOffer'] - $trade['projectedValue7d']));
+            }
+            if (($trade['appreciation7d'] ?? null) !== null && $trade['appreciation7d'] > 0) {
+                $favors[] = sprintf('Revalorització de %s%% en 7 dies.', number_format($trade['appreciation7d'] * 100, 1));
+            }
+            if (($metrics['avoidedLoss'] ?? 0) > 0) {
+                $risks[] = sprintf('Es preveu que perdi al voltant de %s properament.', $this->formatMoney($metrics['avoidedLoss']));
+            }
+            if (($trade['currentOffer'] ?? null) === null) {
+                $risks[] = 'No hi ha cap oferta real que ho justifiqui.';
+            }
+        } elseif ($decision->action === 'HOLD') {
+            if (($trade['appreciation7d'] ?? null) !== null && $trade['appreciation7d'] > 0) {
+                $favors[] = 'Encara manté momentum positiu.';
+            }
+            if (($trade['projectedValue7d'] ?? null) !== null && $trade['projectedValue7d'] > ($metrics['marketValue'] ?? 0)) {
+                $favors[] = 'El valor projectat continua per sobre del valor actual.';
+            }
+            if (($trade['currentOffer'] ?? null) === null) {
+                $favors[] = 'No hi ha cap oferta prou bona.';
+            }
+            if (($timing['shouldRaise'] ?? false) && ! ($timing['shouldRaiseNow'] ?? false)) {
+                $risks[] = 'La clàusula convé pujar-la aviat — no cal fer-ho avui.';
+            }
+        } elseif ($decision->action === 'LOCK_CLAUSE') {
+            if (($metrics['clausePremiumPct'] ?? null) !== null) {
+                $favors[] = sprintf('La clàusula actual només és un %s%% per sobre del valor de mercat.', number_format($metrics['clausePremiumPct'], 1));
+            }
+            $risks[] = ($timing['locked'] ?? false)
+                ? "El període de protecció està a punt d'acabar."
+                : 'Ja no té cap protecció activa.';
+        }
+
+        if ($decision->confidence < 50) {
+            $risks[] = 'Historial de dades limitat.';
+        }
+
+        return ['favors' => $favors, 'risks' => $risks];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function buyDecision(
+        FantasyPlayer $player,
+        FantasyMarketPlayer $listing,
+        FantasyLeague $league,
+        PlayerValueTrendCalculator $trendCalculator,
+        MarketAuctionPremiumEstimator $premiumEstimator,
+        MarketBuyAnalysisService $buyAnalysisService,
+        ?FantasyExternalTrend $externalTrend,
+    ): array {
+        $marketValue = (float) ($listing->market_value ?? $player->market_value ?? 0);
+        $acquisitionPrice = (float) ($listing->asking_price ?? $marketValue);
+        [$value1d, $value3d, $value7d] = $trendCalculator->historicalValues($player, $marketValue, $externalTrend);
+        $premium = $premiumEstimator->estimate($league);
+
+        $buy = $buyAnalysisService->analyze(
+            currentMarketValue: $marketValue,
+            acquisitionPrice: $acquisitionPrice,
+            value1DayAgo: $value1d,
+            value3DaysAgo: $value3d,
+            value7DaysAgo: $value7d,
+            bidCount: $listing->raw_payload['numberOfOffers'] ?? null,
+            expectedWinningPremium: $premium['premium'],
+            auctionHistorySource: $premium['source'],
+        );
+
+        $chaseable = $buy->recommendedBid !== 'DO_NOT_CHASE';
+        ['favors' => $favors, 'risks' => $risks] = $this->buyFavorsRisks($buy, $chaseable);
+
+        return [
+            'type' => 'BUY',
+            'action' => $chaseable ? $buy->recommendation : 'DO_NOT_CHASE',
+            'mainScore' => $buy->buyEconomicScore,
+            'confidence' => $buy->dataQuality,
+            'reason' => null,
+            'favors' => $favors,
+            'risks' => $risks,
+            'raw' => $buy->toArray(),
+            'projections' => ['value3d' => $buy->projectedValue3d, 'value7d' => $buy->projectedValue7d, 'value14d' => $buy->projectedValue14d],
+        ];
+    }
+
+    /**
+     * @return array{favors: array<int, string>, risks: array<int, string>}
+     */
+    private function buyFavorsRisks(MarketBuyAnalysis $buy, bool $chaseable): array
+    {
+        $favors = [];
+        $risks = [];
+
+        if ($buy->expectedROI14d > 0) {
+            $favors[] = sprintf('ROI projectat a 14 dies +%s%%.', number_format($buy->expectedROI14d * 100, 1));
+        }
+        if ($buy->breakEvenDays !== null && $buy->breakEvenDays <= 5) {
+            $favors[] = $buy->breakEvenDays === 0 ? 'Ja recupera la inversió avui mateix.' : sprintf('Break-even en %d dies.', $buy->breakEvenDays);
+        }
+        if ($buy->growth1d !== null && $buy->growth3d !== null && $buy->growth1d > $buy->growth3d) {
+            $favors[] = "Momentum positiu — el creixement s'accelera.";
+        }
+
+        if ($buy->acquisitionPrice > $buy->currentMarketValue) {
+            $premiumPct = ($buy->acquisitionPrice - $buy->currentMarketValue) / $buy->currentMarketValue;
+            $risks[] = sprintf('Sobrepreu del %s%% sobre el valor de mercat.', number_format($premiumPct * 100, 1));
+        }
+        if ($buy->growth1d !== null && $buy->growth3d !== null && $buy->growth1d < $buy->growth3d) {
+            $risks[] = "El creixement s'està frenant (growth1d < growth3d).";
+        }
+        if ($buy->breakEvenDays === null) {
+            $risks[] = 'Sense break-even previst dins del termini simulat.';
+        } elseif ($buy->breakEvenDays > 10) {
+            $risks[] = sprintf('Break-even llarg (%d dies).', $buy->breakEvenDays);
+        }
+        if (! $chaseable) {
+            $risks[] = "L'oferta estimada necessària supera el màxim econòmic.";
+        }
+        if ($buy->dataQuality < 60) {
+            $risks[] = 'Historial de dades limitat.';
+        }
+
+        return ['favors' => $favors, 'risks' => $risks];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function clauseDecision(
+        FantasyPlayer $player,
+        FantasyTeamPlayer $teamPlayer,
+        PlayerValueTrendCalculator $trendCalculator,
+        ClauseEconomicAnalysisService $clauseAnalysisService,
+        ?FantasyExternalTrend $externalTrend,
+    ): array {
+        $marketValue = (float) ($player->market_value ?? 0);
+        $clauseValue = (float) $teamPlayer->clause_value;
+        [$value1d, $value3d, $value7d] = $trendCalculator->historicalValues($player, $marketValue, $externalTrend);
+
+        $analysis = $clauseAnalysisService->analyze($marketValue, $clauseValue, $value1d, $value3d, $value7d);
+        $confidence = $trendCalculator->dataQuality($analysis->growth1d, $analysis->growth3d, $analysis->growth7d);
+
+        ['favors' => $favors, 'risks' => $risks] = $this->clauseFavorsRisks($analysis);
+
+        $isLocked = $teamPlayer->clause_locked_until !== null && $teamPlayer->clause_locked_until->isFuture();
+
+        return [
+            'type' => 'CLAUSE',
+            'action' => $analysis->economicRecommendation,
+            'mainScore' => $analysis->clauseEconomicScore,
+            'confidence' => $confidence,
+            'reason' => null,
+            'favors' => $favors,
+            'risks' => $risks,
+            'raw' => array_merge($analysis->toArray(), [
+                'isLocked' => $isLocked,
+                'daysUntilUnlock' => $isLocked ? (int) ceil(now()->diffInHours($teamPlayer->clause_locked_until) / 24) : null,
+            ]),
+            'projections' => ['value3d' => $analysis->expectedValue3d, 'value7d' => $analysis->expectedValue7d, 'value14d' => $analysis->expectedValue14d],
+        ];
+    }
+
+    /**
+     * @return array{favors: array<int, string>, risks: array<int, string>}
+     */
+    private function clauseFavorsRisks(ClauseEconomicAnalysis $analysis): array
+    {
+        $favors = [];
+        $risks = [];
+
+        if ($analysis->roi14d > 0) {
+            $favors[] = sprintf('ROI a 14 dies +%s%%.', number_format($analysis->roi14d * 100, 1));
+        }
+        if ($analysis->breakEvenDays !== null && $analysis->breakEvenDays <= 5) {
+            $favors[] = $analysis->breakEvenDays === 0 ? 'Ja recupera la prima avui mateix.' : sprintf('Break-even en %d dies.', $analysis->breakEvenDays);
+        }
+        if ($analysis->clausePremiumPct < 0.10) {
+            $favors[] = sprintf('Prima de clàusula baixa (%s%%).', number_format($analysis->clausePremiumPct * 100, 1));
+        }
+
+        if ($analysis->breakEvenDays === null) {
+            $risks[] = 'Sense break-even previst dins del termini simulat.';
+        } elseif ($analysis->breakEvenDays > 10) {
+            $risks[] = sprintf('Break-even llarg (%d dies).', $analysis->breakEvenDays);
+        }
+        if ($analysis->clausePremiumPct > 0.30) {
+            $risks[] = sprintf('Prima de clàusula elevada (%s%%).', number_format($analysis->clausePremiumPct * 100, 1));
+        }
+        if ($analysis->growth1d !== null && $analysis->growth1d < 0) {
+            $risks[] = 'Tendència de valor negativa.';
+        }
+
+        return ['favors' => $favors, 'risks' => $risks];
+    }
+
+    /**
+     * Real per-gameweek points straight from LaLiga's own payload
+     * (`raw_payload.weekPoints`, `[{weekNumber, points}]`) — the same field
+     * PlayerDecisionEngine's recent-form calculation reads, exposed here for
+     * the "Punts per jornada" chart rather than re-synthesized.
+     *
+     * @return array<int, array{weekNumber: int, points: int}>
+     */
+    private function weekPoints(FantasyPlayer $player): array
+    {
+        $weeks = $player->raw_payload['weekPoints'] ?? [];
+
+        return collect($weeks)
+            ->filter(fn ($w) => isset($w['weekNumber'], $w['points']))
+            ->sortBy('weekNumber')
+            ->values()
+            ->map(fn ($w) => ['weekNumber' => (int) $w['weekNumber'], 'points' => (int) $w['points']])
+            ->all();
+    }
+
+    /**
+     * Economic alternatives, not sporting ones: same position, current market
+     * listings only (an owned player isn't something you can go buy instead),
+     * each run through the exact same MarketBuyAnalysisService as the player
+     * itself would use — ranked by Buy Economic Score, not Fantasy Score.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function economicAlternatives(
+        FantasyPlayer $player,
+        ?FantasyLeague $league,
+        PlayerValueTrendCalculator $trendCalculator,
+        MarketAuctionPremiumEstimator $premiumEstimator,
+        MarketBuyAnalysisService $buyAnalysisService,
+    ): array {
+        if (! $league || ! $player->position) {
+            return [];
+        }
+
+        $listings = FantasyMarketPlayer::where('fantasy_league_id', $league->id)
+            ->where('is_on_market', true)
+            ->where('fantasy_player_id', '!=', $player->id)
+            ->whereHas('player', fn ($q) => $q->where('position', $player->position))
+            ->with('player')
+            ->get()
+            ->filter(fn (FantasyMarketPlayer $l) => $l->player && $l->market_value);
+
+        if ($listings->isEmpty()) {
+            return [];
+        }
+
+        $premium = $premiumEstimator->estimate($league);
+
+        return $listings
+            ->map(function (FantasyMarketPlayer $listing) use ($trendCalculator, $buyAnalysisService, $premium) {
+                $marketValue = (float) $listing->market_value;
+                $acquisitionPrice = (float) ($listing->asking_price ?? $marketValue);
+                [$value1d, $value3d, $value7d] = $trendCalculator->historicalValues($listing->player, $marketValue, null);
+
+                $buy = $buyAnalysisService->analyze(
+                    currentMarketValue: $marketValue,
+                    acquisitionPrice: $acquisitionPrice,
+                    value1DayAgo: $value1d,
+                    value3DaysAgo: $value3d,
+                    value7DaysAgo: $value7d,
+                    bidCount: $listing->raw_payload['numberOfOffers'] ?? null,
+                    expectedWinningPremium: $premium['premium'],
+                    auctionHistorySource: $premium['source'],
+                );
+
+                return [
+                    'id' => $listing->player->id,
+                    'name' => $listing->player->name,
+                    'marketValue' => $marketValue,
+                    'buyEconomicScore' => $buy->buyEconomicScore,
+                    'roi14d' => $buy->expectedROI14d,
+                    'recommendation' => $buy->recommendedBid !== 'DO_NOT_CHASE' ? $buy->recommendation : 'DO_NOT_CHASE',
+                ];
+            })
+            ->sortByDesc('buyEconomicScore')
+            ->take(self::ALTERNATIVES_LIMIT)
+            ->values()
+            ->all();
+    }
+
+    private function formatMoney(float $value): string
+    {
+        return number_format($value / 1_000_000, 2, ',', '.').' M€';
+    }
+}
