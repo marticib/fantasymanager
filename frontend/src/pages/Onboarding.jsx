@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import apiClient from '../api/client'
 import { bookmarkletHref } from '../bookmarklet/tokenGrabber'
@@ -51,8 +51,17 @@ export default function Onboarding() {
     }
   }
 
+  // Guards against a double-click firing two submits before React commits
+  // the `disabled` state to the DOM: the PKCE session is single-use
+  // (Cache::pull), so a second request right behind the first always finds
+  // it already consumed and reports "expired" even though barely any time
+  // passed — confirmed live, not a timing issue with the login itself.
+  const finishingRef = useRef(false)
+
   const finishOAuth = async (e) => {
     e.preventDefault()
+    if (finishingRef.current) return
+    finishingRef.current = true
     setOauthFinishing(true)
     setOauthFinishError('')
     try {
@@ -64,6 +73,7 @@ export default function Onboarding() {
       setOauthFinishError(err.response?.data?.message || 'No s\'ha pogut completar el login.')
     } finally {
       setOauthFinishing(false)
+      finishingRef.current = false
     }
   }
 
