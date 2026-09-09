@@ -53,3 +53,16 @@ if (config('fantasy.external.enabled')) {
         ->withoutOverlapping()
         ->onOneServer();
 }
+
+// Backtesting: freeze today's economic verdicts, then grade whatever
+// snapshots' horizons have arrived. Evaluation runs a few minutes after
+// snapshotting so the same run never grades a decision it just took.
+Schedule::command('fantasy:snapshot-decisions')
+    ->cron('*/'.config('fantasy.sync.decision_snapshots_frequency_minutes').' * * * *')
+    ->withoutOverlapping()
+    ->onOneServer();
+
+Schedule::command('fantasy:evaluate-decisions')
+    ->cron('*/'.config('fantasy.sync.decision_evaluation_frequency_minutes').' * * * *')
+    ->withoutOverlapping()
+    ->onOneServer();

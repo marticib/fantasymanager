@@ -68,6 +68,16 @@ class PlayerDecisionEngine
     /** Same tolerance ClauseOpportunityService uses against futbolfantasy scraper mismatches. */
     private const PLAUSIBLE_RATIO_BOUNDS = [1 / 6, 6];
 
+    /**
+     * Below this actual 7-day appreciation (not the 1d-weighted blended
+     * daily growth `LOCK_CLAUSE`'s score uses), the explanation shouldn't
+     * claim the value is "still rising" — that score can legitimately favor
+     * LOCK_CLAUSE on theft risk / cheap premium alone even while the real
+     * 7-day trend is flat or negative, and the explanation text must say so
+     * honestly rather than assert momentum that isn't there.
+     */
+    private const LOCK_CLAUSE_TREND_BAND = 0.01;
+
     public function __construct(
         private readonly FantasyScoreService $scoreService,
         private readonly FantasySettingsService $settings,
@@ -341,9 +351,7 @@ class PlayerDecisionEngine
             return [$seasonAverage, []];
         }
 
-        $weekPoints = collect($player->raw_payload['weekPoints'] ?? [])
-            ->filter(fn ($w) => isset($w['weekNumber'], $w['points']))
-            ->keyBy('weekNumber');
+        $weekPoints = $player->weekPointsBreakdown();
 
         $recentWeeks = [];
         for ($i = 1; $i <= 4; $i++) {
@@ -351,7 +359,7 @@ class PlayerDecisionEngine
             if ($week < 1) {
                 break;
             }
-            $recentWeeks[] = (int) ($weekPoints->get($week)['points'] ?? 0);
+            $recentWeeks[] = $weekPoints[$week] ?? 0;
         }
 
         $weightKeys = ['w1', 'w2', 'w3', 'w4'];
@@ -765,7 +773,12 @@ class PlayerDecisionEngine
                 $metrics['clausePremiumPct'] !== null
                     ? sprintf('La clàusula actual només és un %s%% per sobre del valor de mercat.', number_format($metrics['clausePremiumPct'], 1))
                     : null,
-                'El seu valor de mercat continua a l\'alça.',
+                match (true) {
+                    $trade['appreciation7d'] === null => null,
+                    $trade['appreciation7d'] > self::LOCK_CLAUSE_TREND_BAND => 'El seu valor de mercat continua a l\'alça.',
+                    $trade['appreciation7d'] < -self::LOCK_CLAUSE_TREND_BAND => 'El seu valor de mercat s\'ha mogut a la baixa últimament, però la clàusula continua sent barata de pagar.',
+                    default => 'El seu valor de mercat es manté estable.',
+                },
                 ($clauseTiming['locked'] ?? false)
                     ? 'El període de protecció està a punt d\'acabar — puja-la abans que quedi exposat.'
                     : 'Ja no té cap protecció activa — puja-la per blindar-la com més aviat millor.',

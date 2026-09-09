@@ -244,7 +244,12 @@ class PlayerControllerTest extends TestCase
         $this->assertLessThan($fullResponse->json('decision.confidence'), $partialResponse->json('decision.confidence'));
     }
 
-    /** 10. No data anywhere never invents values — decision is null, trend fields are null. */
+    /**
+     * 10. No data anywhere never invents values: a FREE player still gets a
+     * hypothetical buy-style decision (reusing its own market value as a
+     * stand-in acquisition price), but with dataQuality/confidence at 0 and
+     * a flat (not fabricated) growth assumption — never a null decision.
+     */
     public function test_10_no_data_never_invents_values(): void
     {
         ['user' => $user] = $this->setupFixture();
@@ -254,9 +259,27 @@ class PlayerControllerTest extends TestCase
 
         $response->assertOk();
         $this->assertSame('FREE', $response->json('context'));
-        $this->assertNull($response->json('decision'));
+        $this->assertSame('BUY', $response->json('decision.type'));
+        $this->assertSame(0, $response->json('decision.confidence'));
+        $this->assertSame($response->json('decision.raw.currentMarketValue'), $response->json('decision.raw.acquisitionPrice'));
         $this->assertNull($response->json('trend.change24h'));
         $this->assertNull($response->json('trend.pctChange7d'));
+    }
+
+    /** 12. A FREE player with real trend history gets a real hypothetical Buy Economic Score, not a placeholder. */
+    public function test_12_free_player_gets_a_hypothetical_buy_decision(): void
+    {
+        ['user' => $user] = $this->setupFixture();
+        $player = $this->player('Free Riser', 'FW', 10_000_000);
+        $this->riseSnapshots($player, 10_000_000, [1 => 1.02, 3 => 1.02 ** 3, 7 => 1.02 ** 7]);
+
+        $response = $this->actingAs($user, 'sanctum')->getJson("/api/players/{$player->id}");
+
+        $response->assertOk();
+        $this->assertSame('FREE', $response->json('context'));
+        $this->assertSame('BUY', $response->json('decision.type'));
+        $this->assertGreaterThan(0, $response->json('decision.confidence'));
+        $this->assertGreaterThan(0, $response->json('decision.raw.expectedROI14d'));
     }
 
     /** 11. Favors and risks are derived from real metrics, not hardcoded strings. */
@@ -317,7 +340,7 @@ class PlayerControllerTest extends TestCase
 
         $free = $this->actingAs($user, 'sanctum')->getJson("/api/players/{$player->id}");
         $this->assertSame('FREE', $free->json('context'));
-        $this->assertNull($free->json('decision'));
+        $this->assertSame('BUY', $free->json('decision.type'));
 
         $this->marketListing($league, $player, 10_000_000);
 

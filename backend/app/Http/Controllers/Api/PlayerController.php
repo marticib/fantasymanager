@@ -136,14 +136,21 @@ class PlayerController extends Controller
             'OWNED_BY_RIVAL' => $teamPlayer?->clause_value !== null
                 ? $this->clauseDecision($player, $teamPlayer, $trendCalculator, $clauseAnalysisService, $externalTrend)
                 : null,
+            // Not on the market, but still analyzable hypothetically — reuses
+            // the same buy engine so the page never has to say "not enough
+            // data" just because nobody happens to be selling this player.
+            'FREE' => $league ? $this->buyDecision($player, null, $league, $trendCalculator, $premiumEstimator, $buyAnalysisService, $externalTrend) : null,
             default => null,
         };
 
         // Bounded to the chart window — fantasy_player_snapshots only starts
-        // accumulating the day an account connects, so a freshly-connected
-        // account falls back to futbolfantasy's day-offset values (same
-        // unofficial source as the "7d ext." figures elsewhere) rather than
-        // showing a near-empty chart. See SparklineHistoryBuilder.
+        // accumulating the day an account connects, so even once an account
+        // clears the "enough distinct points" bar, those points can all
+        // cluster in the last day or two of a 30-day window. This chart
+        // prefers futbolfantasy's real day-offset history (see
+        // SparklineHistoryBuilder's $preferExternal) precisely because it
+        // covers the whole window instead of just the tail end — falling
+        // back to "own" only when there's no usable external trend at all.
         $ownSnapshots = $player->snapshots()
             ->whereNotNull('market_value')
             ->where('captured_at', '>=', now()->subDays(self::HISTORY_WINDOW_DAYS))
@@ -152,7 +159,13 @@ class PlayerController extends Controller
 
         $ownHistory = $ownSnapshots->map(fn ($s) => ['value' => $s->market_value, 'capturedAt' => $s->captured_at->toIso8601String()]);
 
-        [$historyPoints, $historySource] = $historyBuilder->build($ownHistory, $externalTrend, $player->market_value ?? 0, dayOffsets: [30, 14, 7, 3, 1]);
+        [$historyPoints, $historySource] = $historyBuilder->build(
+            $ownHistory,
+            $externalTrend,
+            $player->market_value ?? 0,
+            dayOffsets: [30, 14, 7, 3, 1],
+            preferExternal: true,
+        );
 
         if ($historySource === 'own') {
             $history = $ownSnapshots->map(fn ($s) => [
@@ -316,13 +329,17 @@ class PlayerController extends Controller
      */
     private function buyDecision(
         FantasyPlayer $player,
-        FantasyMarketPlayer $listing,
+        ?FantasyMarketPlayer $listing,
         FantasyLeague $league,
         PlayerValueTrendCalculator $trendCalculator,
         MarketAuctionPremiumEstimator $premiumEstimator,
         MarketBuyAnalysisService $buyAnalysisService,
         ?FantasyExternalTrend $externalTrend,
     ): array {
+        // FREE players have no real listing/asking price to analyze against —
+        // this runs the same economic engine hypothetically, using the
+        // player's own market value as a stand-in acquisition price, so the
+        // page can still answer "would this be worth chasing if it appeared?".
         $marketValue = (float) ($listing->market_value ?? $player->market_value ?? 0);
         $acquisitionPrice = (float) ($listing->asking_price ?? $marketValue);
         [$value1d, $value3d, $value7d] = $trendCalculator->historicalValues($player, $marketValue, $externalTrend);
@@ -334,7 +351,7 @@ class PlayerController extends Controller
             value1DayAgo: $value1d,
             value3DaysAgo: $value3d,
             value7DaysAgo: $value7d,
-            bidCount: $listing->raw_payload['numberOfOffers'] ?? null,
+            bidCount: $listing?->raw_payload['numberOfOffers'] ?? null,
             expectedWinningPremium: $premium['premium'],
             auctionHistorySource: $premium['source'],
         );
@@ -467,7 +484,7 @@ class PlayerController extends Controller
 
     /**
      * Real per-gameweek points straight from LaLiga's own payload
-     * (`raw_payload.weekPoints`, `[{weekNumber, points}]`) — the same field
+     * (`FantasyPlayer::weekPointsBreakdown()`) — the same normalized field
      * PlayerDecisionEngine's recent-form calculation reads, exposed here for
      * the "Punts per jornada" chart rather than re-synthesized.
      *
@@ -475,13 +492,10 @@ class PlayerController extends Controller
      */
     private function weekPoints(FantasyPlayer $player): array
     {
-        $weeks = $player->raw_payload['weekPoints'] ?? [];
-
-        return collect($weeks)
-            ->filter(fn ($w) => isset($w['weekNumber'], $w['points']))
+        return collect($player->weekPointsBreakdown())
+            ->map(fn (int $points, int $weekNumber) => ['weekNumber' => $weekNumber, 'points' => $points])
             ->sortBy('weekNumber')
             ->values()
-            ->map(fn ($w) => ['weekNumber' => (int) $w['weekNumber'], 'points' => (int) $w['points']])
             ->all();
     }
 

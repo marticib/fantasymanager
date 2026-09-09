@@ -3,6 +3,8 @@
 namespace Tests\Feature;
 
 use App\Models\FantasyAccount;
+use App\Models\FantasyDailyReport;
+use App\Models\FantasyDecisionSnapshot;
 use App\Models\FantasyLeague;
 use App\Models\FantasyPlayer;
 use App\Models\FantasyPlayerSnapshot;
@@ -191,5 +193,163 @@ class HistoryControllerTest extends TestCase
         $response->assertOk();
         $this->assertSame([], $response->json('data'));
         $this->assertNotEmpty($response->json('message'));
+    }
+
+    /** 9. playersValue 90M + cash 10M -> total 100M, reusing fantasy_daily_reports, never a guess. */
+    public function test_total_value_combines_players_value_with_the_real_recorded_cash_balance(): void
+    {
+        [$user, $account, $team] = $this->setUpAccountWithTeam();
+        $player = FantasyPlayer::create(['external_id' => uniqid(), 'name' => 'Solo Player']);
+        $day = Carbon::now()->subDays(1);
+
+        FantasyPlayerSnapshot::create([
+            'fantasy_player_id' => $player->id, 'owner_team_id' => $team->id,
+            'market_value' => 90_000_000, 'captured_at' => $day,
+        ]);
+        FantasyDailyReport::create([
+            'fantasy_account_id' => $account->id, 'report_date' => $day->toDateString(),
+            'summary' => ['cash' => 10_000_000, 'teamValue' => 90_000_000],
+        ]);
+
+        $response = $this->actingAs($user, 'sanctum')->getJson('/api/history/team-value');
+
+        $response->assertOk();
+        $row = collect($response->json('data'))->firstWhere('day', $day->toDateString());
+        $this->assertSame(90_000_000, $row['players_value']);
+        $this->assertSame(10_000_000, $row['cash_balance']);
+        $this->assertSame(100_000_000, $row['total_value']);
+    }
+
+    /** A day with no matching daily report has a null cash/total — never guessed. */
+    public function test_a_day_without_a_daily_report_has_no_cash_or_total_value(): void
+    {
+        [$user, , $team] = $this->setUpAccountWithTeam();
+        $player = FantasyPlayer::create(['external_id' => uniqid(), 'name' => 'Solo Player']);
+        $day = Carbon::now()->subDays(1);
+
+        FantasyPlayerSnapshot::create([
+            'fantasy_player_id' => $player->id, 'owner_team_id' => $team->id,
+            'market_value' => 50_000_000, 'captured_at' => $day,
+        ]);
+
+        $response = $this->actingAs($user, 'sanctum')->getJson('/api/history/team-value');
+
+        $response->assertOk();
+        $row = collect($response->json('data'))->firstWhere('day', $day->toDateString());
+        $this->assertNull($row['cash_balance']);
+        $this->assertNull($row['total_value']);
+    }
+
+    /** 10. initial 100M, current 120M -> growth +20M, ROI +20%. */
+    public function test_summary_computes_growth_and_roi_from_first_and_last_total_value(): void
+    {
+        [$user, $account, $team] = $this->setUpAccountWithTeam();
+        $player = FantasyPlayer::create(['external_id' => uniqid(), 'name' => 'Growing Player']);
+
+        $first = Carbon::now()->subDays(3);
+        $last = Carbon::now()->subDays(1);
+
+        FantasyPlayerSnapshot::create(['fantasy_player_id' => $player->id, 'owner_team_id' => $team->id, 'market_value' => 90_000_000, 'captured_at' => $first]);
+        FantasyDailyReport::create(['fantasy_account_id' => $account->id, 'report_date' => $first->toDateString(), 'summary' => ['cash' => 10_000_000]]);
+
+        FantasyPlayerSnapshot::create(['fantasy_player_id' => $player->id, 'owner_team_id' => $team->id, 'market_value' => 108_000_000, 'captured_at' => $last]);
+        FantasyDailyReport::create(['fantasy_account_id' => $account->id, 'report_date' => $last->toDateString(), 'summary' => ['cash' => 12_000_000]]);
+
+        $response = $this->actingAs($user, 'sanctum')->getJson('/api/history/team-value');
+
+        $response->assertOk();
+        $summary = $response->json('summary');
+        $this->assertSame(100_000_000, $summary['initialValue']);
+        $this->assertSame(120_000_000, $summary['currentValue']);
+        $this->assertSame(20_000_000, $summary['growth']);
+        $this->assertEqualsWithDelta(20.0, $summary['roiPct'], 0.01);
+        $this->assertTrue($summary['includesCash']);
+    }
+
+    /** 14. No snapshots at all -> a correct empty state, not a fabricated summary. */
+    public function test_summary_is_null_when_there_is_no_history_at_all(): void
+    {
+        [$user] = $this->setUpAccountWithTeam();
+
+        $response = $this->actingAs($user, 'sanctum')->getJson('/api/history/team-value');
+
+        $response->assertOk();
+        $this->assertSame([], $response->json('data'));
+        $this->assertNull($response->json('summary'));
+    }
+
+    /** 15. No evaluated decisions yet -> null metrics, never a fake 0%. */
+    public function test_assistant_performance_does_not_show_zero_percent_when_nothing_is_evaluated_yet(): void
+    {
+        [$user, $account] = $this->setUpAccountWithTeam();
+        FantasyDecisionSnapshot::create([
+            'fantasy_account_id' => $account->id, 'fantasy_player_id' => FantasyPlayer::create(['external_id' => uniqid(), 'name' => 'P'])->id,
+            'decision_type' => 'MARKET_BUY', 'action' => 'BUY', 'horizon_days' => 14,
+            'snapshot_date' => Carbon::now()->toDateString(), 'payload' => [], 'algorithm_version' => 'v1',
+            'status' => FantasyDecisionSnapshot::STATUS_PENDING, 'generated_at' => now(),
+        ]);
+
+        $response = $this->actingAs($user, 'sanctum')->getJson('/api/history/assistant-performance');
+
+        $response->assertOk();
+        $this->assertSame(0, $response->json('evaluatedCount'));
+        $this->assertSame(1, $response->json('pendingCount'));
+        $this->assertNull($response->json('accuracyPct'));
+        $this->assertNull($response->json('theoreticalProfit'));
+    }
+
+    /** 11. Pending decisions never count toward accuracy's denominator. */
+    public function test_accuracy_excludes_pending_decisions(): void
+    {
+        [$user, $account] = $this->setUpAccountWithTeam();
+        $playerA = FantasyPlayer::create(['external_id' => uniqid(), 'name' => 'A']);
+        $playerB = FantasyPlayer::create(['external_id' => uniqid(), 'name' => 'B']);
+
+        FantasyDecisionSnapshot::create([
+            'fantasy_account_id' => $account->id, 'fantasy_player_id' => $playerA->id,
+            'decision_type' => 'MARKET_BUY', 'action' => 'BUY', 'horizon_days' => 14,
+            'snapshot_date' => Carbon::now()->subDays(20)->toDateString(), 'payload' => [], 'algorithm_version' => 'v1',
+            'status' => FantasyDecisionSnapshot::STATUS_EVALUATED, 'outcome' => ['favorable' => true, 'realProfit' => 1000],
+            'generated_at' => now(), 'evaluated_at' => now(),
+        ]);
+        FantasyDecisionSnapshot::create([
+            'fantasy_account_id' => $account->id, 'fantasy_player_id' => $playerB->id,
+            'decision_type' => 'MARKET_BUY', 'action' => 'BUY', 'horizon_days' => 14,
+            'snapshot_date' => Carbon::now()->toDateString(), 'payload' => [], 'algorithm_version' => 'v1',
+            'status' => FantasyDecisionSnapshot::STATUS_PENDING, 'generated_at' => now(),
+        ]);
+
+        $response = $this->actingAs($user, 'sanctum')->getJson('/api/history/assistant-performance');
+
+        $response->assertOk();
+        $this->assertEquals(100.0, $response->json('accuracyPct'));
+        $this->assertSame(1, $response->json('evaluatedCount'));
+        $this->assertSame(1, $response->json('pendingCount'));
+    }
+
+    public function test_decisions_list_can_be_filtered_by_action_and_status(): void
+    {
+        [$user, $account] = $this->setUpAccountWithTeam();
+        $player = FantasyPlayer::create(['external_id' => uniqid(), 'name' => 'Filter Target']);
+        $other = FantasyPlayer::create(['external_id' => uniqid(), 'name' => 'Other']);
+
+        FantasyDecisionSnapshot::create([
+            'fantasy_account_id' => $account->id, 'fantasy_player_id' => $player->id,
+            'decision_type' => 'MARKET_BUY', 'action' => 'BUY', 'horizon_days' => 14,
+            'snapshot_date' => Carbon::now()->toDateString(), 'payload' => [], 'algorithm_version' => 'v1',
+            'status' => FantasyDecisionSnapshot::STATUS_PENDING, 'generated_at' => now(),
+        ]);
+        FantasyDecisionSnapshot::create([
+            'fantasy_account_id' => $account->id, 'fantasy_player_id' => $other->id,
+            'decision_type' => 'ROSTER', 'action' => 'HOLD', 'horizon_days' => 7,
+            'snapshot_date' => Carbon::now()->toDateString(), 'payload' => [], 'algorithm_version' => 'v1',
+            'status' => FantasyDecisionSnapshot::STATUS_PENDING, 'generated_at' => now(),
+        ]);
+
+        $response = $this->actingAs($user, 'sanctum')->getJson('/api/history/decisions?action=BUY');
+
+        $response->assertOk();
+        $this->assertCount(1, $response->json('data'));
+        $this->assertSame('Filter Target', $response->json('data.0.player.name'));
     }
 }

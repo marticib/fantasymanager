@@ -70,4 +70,34 @@ class FantasyPlayer extends Model
 
         return $teamPlayer?->team;
     }
+
+    /**
+     * Real per-gameweek points straight from LaLiga's own payload, normalized
+     * across the two shapes different endpoints return it in — confirmed
+     * live, not an edge case: a market/catalog sync leaves `weekPoints` as
+     * `[{weekNumber, points}]`, while a roster/lineup sync (i.e. every
+     * player currently on a team) instead leaves `weekPoints` as a bare
+     * scalar (just the most recent week) and carries the real breakdown
+     * under `lastStats` as `[{weekNumber, totalPoints, ...}]` instead. Which
+     * shape a given player has depends on which endpoint last synced it, not
+     * on the player, so both must be read — reading `weekPoints` alone
+     * silently sees "no data" for every owned player.
+     *
+     * @return array<int, int> weekNumber => points
+     */
+    public function weekPointsBreakdown(): array
+    {
+        $weekPoints = collect($this->raw_payload['weekPoints'] ?? [])
+            ->filter(fn ($w) => is_array($w) && isset($w['weekNumber'], $w['points']))
+            ->mapWithKeys(fn ($w) => [(int) $w['weekNumber'] => (int) $w['points']]);
+
+        if ($weekPoints->isNotEmpty()) {
+            return $weekPoints->all();
+        }
+
+        return collect($this->raw_payload['lastStats'] ?? [])
+            ->filter(fn ($w) => is_array($w) && isset($w['weekNumber'], $w['totalPoints']))
+            ->mapWithKeys(fn ($w) => [(int) $w['weekNumber'] => (int) $w['totalPoints']])
+            ->all();
+    }
 }

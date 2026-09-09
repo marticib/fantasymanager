@@ -61,6 +61,21 @@ class PlayerNameMatcherTest extends TestCase
         $this->assertSame('club_disambiguated', $result['confidence']);
     }
 
+    public function test_prefix_match_when_our_name_carries_a_second_surname_the_source_drops(): void
+    {
+        // Real case: our own data stores the full Spanish name (two surnames),
+        // but futbolfantasy (like most public-facing sources) publishes only
+        // "Gerard Moreno" — the first surname, without "Balagueró".
+        $player = $this->player('Gerard Moreno Balagueró', 'Villarreal CF', 'Gerard');
+        $matcher = new PlayerNameMatcher;
+        $index = $matcher->buildIndex(FantasyPlayer::all());
+
+        $result = $matcher->match($index, 'Gerard Moreno', 'Villarreal');
+
+        $this->assertSame($player->id, $result['player']->id);
+        $this->assertSame('exact', $result['confidence']);
+    }
+
     public function test_ambiguous_surname_with_no_club_agreement_is_left_unmatched(): void
     {
         $this->player('Iker Muñoz', 'Sevilla FC');

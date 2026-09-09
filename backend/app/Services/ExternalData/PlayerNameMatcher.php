@@ -15,11 +15,16 @@ use Illuminate\Support\Collection;
 class PlayerNameMatcher
 {
     /**
-     * Indexes each player under their full normalized name/nickname AND
-     * under just the last word of it ("Javi Hernández" -> also "hernandez")
-     * — our own stored names are just as often "Firstname Surname" as a bare
-     * nickname, so the surname-only key is what lets a scraped "Javier
-     * Hernández" suffix-match down to it (see match()).
+     * Indexes each player under their full normalized name/nickname, under
+     * just the last word of it ("Javi Hernández" -> also "hernandez"), AND
+     * under every leading prefix of two or more words ("Gerard Moreno
+     * Balagueró" -> also "gerard moreno") — our own stored full names carry
+     * both Spanish surnames while a scraped source (or a fan-facing site)
+     * commonly drops the second one, so match()'s raw "Gerard Moreno" needs
+     * a "gerard moreno" key to land on even though it's not the full stored
+     * name. The last-word key handles the opposite direction: a scraped
+     * name with extra leading tokens suffix-matching down to a stored
+     * surname-only nickname.
      *
      * @param  Collection<int, FantasyPlayer>  $players
      * @return array<string, FantasyPlayer[]>
@@ -41,6 +46,9 @@ class PlayerNameMatcher
                 $tokens = explode(' ', $normalized);
                 if (count($tokens) > 1) {
                     $index[end($tokens)][] = $player;
+                }
+                for ($len = 2; $len < count($tokens); $len++) {
+                    $index[implode(' ', array_slice($tokens, 0, $len))][] = $player;
                 }
             }
         }

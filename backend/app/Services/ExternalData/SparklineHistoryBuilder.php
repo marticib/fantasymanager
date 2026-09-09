@@ -42,11 +42,24 @@ class SparklineHistoryBuilder
     /**
      * @param  Collection<int, array{value: int, capturedAt: string}>  $ownHistory  ascending by captured_at
      * @param  int[]  $dayOffsets  descending, e.g. [7, 3, 1] — each must be a key in VALUE_FIELD_BY_DAYS_AGO
+     * @param  bool  $preferExternal  skip the "own wins once it clears the low 3-point bar" shortcut below —
+     *                                used by the player detail page's full evolution chart, where "own" being
+     *                                real doesn't mean it's *useful*: a freshly-connected account can clear
+     *                                that bar with a few hours-apart points that all cluster at the very end
+     *                                of a 30-day window, while futbolfantasy already has real daily-resolution
+     *                                history covering the whole window. Still falls back to "own" if there's no
+     *                                external trend at all, or too few external points to be worth showing.
      * @return array{0: array, 1: 'own'|'external'}
      */
-    public function build(Collection $ownHistory, ?FantasyExternalTrend $externalTrend, int $currentValue, ?Carbon $now = null, array $dayOffsets = [7, 3, 1]): array
-    {
-        if ($ownHistory->pluck('value')->unique()->count() >= self::MIN_OWN_DISTINCT_POINTS) {
+    public function build(
+        Collection $ownHistory,
+        ?FantasyExternalTrend $externalTrend,
+        int $currentValue,
+        ?Carbon $now = null,
+        array $dayOffsets = [7, 3, 1],
+        bool $preferExternal = false,
+    ): array {
+        if (! $preferExternal && $ownHistory->pluck('value')->unique()->count() >= self::MIN_OWN_DISTINCT_POINTS) {
             return [$ownHistory->values()->all(), 'own'];
         }
 

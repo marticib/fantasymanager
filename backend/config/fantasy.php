@@ -93,6 +93,46 @@ return [
         'league_frequency_minutes' => (int) env('FANTASY_SYNC_LEAGUE_FREQUENCY', 60),
         'recommendations_frequency_minutes' => (int) env('FANTASY_RECOMMENDATIONS_FREQUENCY', 30),
         'clauses_frequency_minutes' => (int) env('FANTASY_SYNC_CLAUSES_FREQUENCY', 120),
+        'decision_snapshots_frequency_minutes' => (int) env('FANTASY_SNAPSHOT_DECISIONS_FREQUENCY', 720),
+        'decision_evaluation_frequency_minutes' => (int) env('FANTASY_EVALUATE_DECISIONS_FREQUENCY', 720),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Backtesting — fantasy:snapshot-decisions / fantasy:evaluate-decisions
+    |--------------------------------------------------------------------------
+    |
+    | Snapshotting freezes what PlayerDecisionEngine/MarketBuyAnalysisService/
+    | ClauseEconomicAnalysisService actually said on a given day (never a
+    | second copy of their math); evaluation later grades that frozen
+    | decision against what really happened, using the value the algorithm
+    | itself would have needed to reach to be "correct" — read from the
+    | snapshot's own `payload`, never recomputed with today's config.
+    |
+    */
+    'backtest' => [
+        // Bump this by hand whenever a scoring formula, weight, decay band or
+        // threshold changes, so an old snapshot is never silently re-graded
+        // as if it had been produced by a different algorithm.
+        'algorithm_version' => env('FANTASY_ALGORITHM_VERSION', '2026.09.1'),
+
+        // How many days out each action type is graded against — matches the
+        // headline horizon each engine already reports (ROI14d for buy/clause,
+        // projectedValue7d for the trade/sell side).
+        'horizon_days' => [
+            'BUY' => 14,
+            'CONSIDER' => 14,
+            'DO_NOT_CHASE' => 14,
+            'PAY_CLAUSE' => 14,
+            'SELL' => 7,
+            'HOLD' => 7,
+        ],
+
+        // A prediction for "14 days out" rarely has a snapshot at exactly
+        // +14d — the nearest real snapshot within this many extra days is
+        // accepted as the outcome; beyond it, the decision is
+        // INSUFFICIENT_DATA rather than guessing.
+        'evaluation_tolerance_days' => 2,
     ],
 
     /*

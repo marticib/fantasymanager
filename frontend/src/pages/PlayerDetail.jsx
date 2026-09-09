@@ -172,8 +172,14 @@ export default function PlayerDetail() {
   const color = decision ? DECISION_COLOR[decision.action] || 'hold' : 'hold'
   const label = decision ? DECISION_LABEL[decision.action] || decision.action : null
   const type = classifyPlayerType(data.trend.classification, data.player.averagePoints)
+  // Own snapshot history is sparse right after connecting an account — fall
+  // back to futbolfantasy's daily trend (already fetched for the "Tendència
+  // externa" block below) rather than showing "—", same *ext. convention
+  // used for sparklines elsewhere (Market/Team/Clauses).
   const change24h = data.trend.change24h
+  const change24hExternal = change24h == null ? data.externalTrend?.pct1d ?? null : null
   const pct7d = data.trend.pctChange7d
+  const pct7dExternal = pct7d == null ? data.externalTrend?.pct7d ?? null : null
   const raw = decision?.raw
 
   return (
@@ -210,11 +216,18 @@ export default function PlayerDetail() {
       <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-5">
         <StatTile label="Valor" value={formatMoneyM(data.player.marketValue)} accent="buy" />
         <StatTile
-          label="24h"
+          label={change24h == null && change24hExternal != null ? '24h *ext.' : '24h'}
           value={
             change24h != null ? (
               <span className={`inline-flex items-center gap-1 rounded-md bg-current/10 px-1.5 py-0.5 text-sm ${change24h >= 0 ? 'text-buy' : 'text-sell'}`}>
                 {change24h >= 0 ? '↗' : '↘'} {formatDelta(change24h)}
+              </span>
+            ) : change24hExternal != null ? (
+              <span
+                className={`inline-flex items-center gap-1 rounded-md bg-current/10 px-1.5 py-0.5 text-sm ${change24hExternal >= 0 ? 'text-buy' : 'text-sell'}`}
+                title="Font externa (futbolfantasy.com, no oficial) — encara no tenim prou historial propi"
+              >
+                {change24hExternal >= 0 ? '↗' : '↘'} {formatPercent(change24hExternal)}
               </span>
             ) : (
               '—'
@@ -222,11 +235,18 @@ export default function PlayerDetail() {
           }
         />
         <StatTile
-          label="7 dies"
+          label={pct7d == null && pct7dExternal != null ? '7 dies *ext.' : '7 dies'}
           value={
             pct7d != null ? (
               <span className={`inline-flex items-center gap-1 rounded-md bg-current/10 px-1.5 py-0.5 text-sm ${pct7d >= 0 ? 'text-buy' : 'text-sell'}`}>
                 {pct7d >= 0 ? '↗' : '↘'} {formatPercent(pct7d)}
+              </span>
+            ) : pct7dExternal != null ? (
+              <span
+                className={`inline-flex items-center gap-1 rounded-md bg-current/10 px-1.5 py-0.5 text-sm ${pct7dExternal >= 0 ? 'text-buy' : 'text-sell'}`}
+                title="Font externa (futbolfantasy.com, no oficial) — encara no tenim prou historial propi"
+              >
+                {pct7dExternal >= 0 ? '↗' : '↘'} {formatPercent(pct7dExternal)}
               </span>
             ) : (
               '—'
@@ -344,6 +364,11 @@ export default function PlayerDetail() {
             {decision ? (
               <>
                 <p className={`mt-2 text-3xl font-extrabold tracking-tight ${ACTION_TEXT_CLASS[color]}`}>{label}</p>
+                {data.context === 'FREE' && (
+                  <p className="mt-1 text-xs text-text-muted">
+                    Hipotètic — el jugador no és al mercat ara mateix, comparat amb el seu valor actual.
+                  </p>
+                )}
                 {decision.confidence != null && (
                   <p className="mt-2 flex items-center gap-1.5 text-sm text-text-muted">
                     <SignalIcon className="h-3.5 w-3.5" />

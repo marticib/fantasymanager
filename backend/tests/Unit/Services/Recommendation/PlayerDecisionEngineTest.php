@@ -236,6 +236,78 @@ class PlayerDecisionEngineTest extends TestCase
         $this->assertLessThan(5.0, $result->metrics['clausePremiumPct']);
     }
 
+    /**
+     * A cheap, already-unprotected clause can legitimately outscore Hold on
+     * theft risk and premium efficiency alone even while the player's value
+     * is actually declining — but the explanation must never claim the
+     * value is "still rising" in that situation (real bug: it used to,
+     * unconditionally, for every LOCK_CLAUSE verdict).
+     */
+    public function test_a_cheap_unprotected_clause_is_raised_without_claiming_a_rise_it_is_not_having(): void
+    {
+        ['account' => $account, 'team' => $team] = $this->setupAccount(cash: 20_000_000);
+
+        $player = $this->ownPlayer($team, 'Undervalued But Falling', [
+            'position' => 'MF',
+            'market_value' => 30_000_000,
+            'average_points' => 6.0,
+            'points' => 60,
+            'status' => 'ok',
+            'raw_payload' => $this->weekPoints([4 => 6, 3 => 6, 2 => 5, 1 => 6]),
+        ], clauseValue: 30_500_000, teamPlayerAttrs: ['clause_locked_until' => Carbon::now()->subDays(16)]); // clause barely above market value, protection already expired
+
+        // Falling gently (-0.2%/day) — the opposite of what the old,
+        // unconditional "still rising" reason text claimed.
+        $this->fallSnapshots($player, 30_000_000, [1 => 1.002, 3 => 1.002 ** 3, 7 => 1.002 ** 7]);
+
+        $result = $this->engine()->evaluateRoster($account)->get($player->id);
+
+        $this->assertSame('LOCK_CLAUSE', $result->action);
+        $this->assertLessThan(0, $result->trade['appreciation7d']);
+        $this->assertStringNotContainsString("l'alça", $result->reason);
+        $this->assertStringContainsString('baixa', $result->reason);
+    }
+
+    /**
+     * Regression test for the real bug this comes from: a roster player's
+     * `raw_payload.weekPoints` is a bare scalar (not the `[{weekNumber,
+     * points}]` shape `expectedWeeklyPoints()` expects) whenever the last
+     * sync went through the roster/lineup endpoint — which is every owned
+     * player. Reading only `weekPoints` silently saw zero played weeks for
+     * the entire roster, flooring `starterProbability`/`sportingScore` and
+     * skewing Hold artificially low against Sell/LOCK_CLAUSE. The real
+     * per-week data was there all along, under `lastStats`.
+     */
+    public function test_a_player_with_roster_shaped_raw_payload_still_gets_real_recent_form(): void
+    {
+        ['account' => $account, 'team' => $team] = $this->setupAccount(cash: 20_000_000);
+
+        $player = $this->ownPlayer($team, 'Roster Payload Shape', [
+            'position' => 'MF',
+            'market_value' => 26_566_014,
+            'average_points' => 4.75,
+            'points' => 19,
+            'status' => 'ok',
+            // Roster/lineup shape: `weekPoints` a bare scalar, real per-week
+            // breakdown under `lastStats.totalPoints` instead.
+            'raw_payload' => [
+                'weekPoints' => 9,
+                'lastStats' => [
+                    ['weekNumber' => 1, 'totalPoints' => 4],
+                    ['weekNumber' => 2, 'totalPoints' => 5],
+                    ['weekNumber' => 3, 'totalPoints' => 1],
+                    ['weekNumber' => 4, 'totalPoints' => 9],
+                ],
+            ],
+        ], clauseValue: 32_334_415, teamPlayerAttrs: ['clause_locked_until' => Carbon::now()->subDays(16)]);
+
+        $result = $this->engine()->evaluateRoster($account)->get($player->id);
+
+        // All 4 recent weeks were actually played (real points, none zero) —
+        // starterProbability must reflect that, not the pre-fix 30% floor.
+        $this->assertGreaterThan(80, $result->metrics['starterProbability']);
+    }
+
     public function test_a_player_with_insufficient_data_is_held_with_low_confidence(): void
     {
         ['account' => $account, 'team' => $team] = $this->setupAccount(currentMatchday: null);

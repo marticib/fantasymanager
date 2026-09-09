@@ -65,6 +65,9 @@ Route::middleware('auth:sanctum')->group(function () {
     // History
     Route::get('/history/team-value', [HistoryController::class, 'teamValue']);
     Route::get('/history/player/{player}', [HistoryController::class, 'player']);
+    Route::get('/history/assistant-performance', [HistoryController::class, 'assistantPerformance']);
+    Route::get('/history/decisions', [HistoryController::class, 'decisions']);
+    Route::get('/history/decisions/{decision}', [HistoryController::class, 'decision']);
 
     // Settings (configurable rules / weights)
     Route::get('/settings', [SettingController::class, 'index']);
