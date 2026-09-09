@@ -108,7 +108,18 @@ Write-Ok "winget disponible"
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
     Write-Warn "Aquesta finestra no s'executa com a Administrador."
-    Write-Warn "Si la installacio de PostgreSQL o PHP falla, torna a executar install-windows.bat amb 'Executar com a administrador'."
+    Write-Warn "Instal.lar PostgreSQL o PHP amb winget sol fallar silenciosament sense permisos d'Administrador."
+    $relaunch = Read-Host "    Vols reiniciar l'script com a Administrador ara (recomanat)? (S/n)"
+    if ($relaunch -notmatch '^[nN]') {
+        Write-Host "    Reiniciant com a Administrador en una finestra nova (accepta el dialeg UAC)..." -ForegroundColor DarkGray
+        Write-Host "    Aquesta finestra ja no cal - la installacio continua a la finestra nova." -ForegroundColor DarkGray
+        try {
+            Start-Process powershell -Verb RunAs -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"")
+            exit 0
+        } catch {
+            Write-Warn "No s'ha pogut reiniciar com a Administrador (UAC cancel.lat?). Continuant sense permisos elevats."
+        }
+    }
 }
 
 # --- 1. Prerequisits -----------------------------------------------------
@@ -118,10 +129,10 @@ $pgOk       = Install-IfMissing -Command 'psql'    -WingetId 'PostgreSQL.Postgre
 $phpOk      = Install-IfMissing -Command 'php'     -WingetId 'PHP.PHP.8.4'               -FriendlyName 'PHP'        -ManualUrl 'https://windows.php.net/download/'
 $composerOk = Install-IfMissing -Command 'composer' -WingetId 'Composer.Composer'        -FriendlyName 'Composer'   -ManualUrl 'https://getcomposer.org/download/'
 
-# --- 2. Extensions de PHP (pdo_pgsql, mbstring, zip) ---------------------
+# --- 2. Extensions de PHP -------------------------------------------------
 
 if ($phpOk) {
-    Write-Step "Comprovant extensions de PHP (pdo_pgsql, mbstring, zip)"
+    Write-Step "Comprovant extensions de PHP (pdo_pgsql, mbstring, zip, fileinfo, openssl, curl)"
 
     $iniLine = (php --ini 2>$null | Select-String 'Loaded Configuration File:')
     $iniPath = $null
@@ -144,7 +155,14 @@ if ($phpOk) {
     }
 
     if ($iniPath -and (Test-Path $iniPath)) {
-        $required = @('pdo_pgsql', 'mbstring', 'zip')
+        # fileinfo/openssl/curl: exactament les que php.ini-development deixa
+        # comentades per defecte i que Laravel sempre necessita (fileinfo el
+        # fa servir league/flysystem - Composer no ho detecta fins l'instant
+        # de fer composer install, no abans; openssl per key:generate/xifrat;
+        # curl pels clients HTTP a l'API de LaLiga i futbolfantasy.com) -
+        # confirmat amb un cas real: composer install fallant nomes per
+        # fileinfo mentre pdo_pgsql/mbstring/zip ja hi eren actives.
+        $required = @('pdo_pgsql', 'mbstring', 'zip', 'fileinfo', 'openssl', 'curl')
         $loaded = @((php -m 2>$null))
         $missing = $required | Where-Object { $loaded -notcontains $_ }
 
@@ -222,7 +240,8 @@ try {
         Write-ErrorMsg "Composer no disponible - salta't la installacio de dependencies PHP."
     }
 
-    if (Test-Command 'php') {
+    $vendorAutoload = Join-Path $BackendDir 'vendor\autoload.php'
+    if ((Test-Command 'php') -and (Test-Path $vendorAutoload)) {
         php artisan key:generate --ansi
         if ($LASTEXITCODE -eq 0) {
             Write-Ok "Clau d'aplicacio generada"
@@ -236,6 +255,12 @@ try {
         } else {
             Write-Warn "No s'han pogut executar les migracions - revisa la connexio a PostgreSQL a backend\.env (DB_HOST, DB_USERNAME, DB_PASSWORD)."
         }
+    } elseif (Test-Command 'php') {
+        # composer install ha fallat mes amunt -> no hi ha vendor/autoload.php.
+        # Cridar artisan igualment nomes tira un fatal error de PHP en cascada
+        # (confirmat amb un cas real) sense afegir cap informacio nova.
+        Write-Warn "No hi ha vendor/autoload.php - salta't key:generate i migrate fins que 'composer install' funcioni."
+        Write-Warn "Un cop arreglat l'error de Composer de mes amunt, torna a executar aquest script."
     }
 } finally {
     Pop-Location
