@@ -15,6 +15,7 @@ import History from './pages/History'
 import Settings from './pages/Settings'
 import PlayerDetail from './pages/PlayerDetail'
 import Players from './pages/Players'
+import RivalTeam from './pages/RivalTeam'
 
 function RequireAuth({ children }) {
   const { token, loading } = useAuth()
@@ -53,6 +54,7 @@ export default function App() {
             <Route path="/trading" element={<Trading />} />
             <Route path="/players" element={<Players />} />
             <Route path="/standings" element={<Standings />} />
+            <Route path="/standings/:teamId" element={<RivalTeam />} />
             <Route path="/history" element={<History />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/players/:id" element={<PlayerDetail />} />

@@ -29,6 +29,7 @@ class StandingController extends Controller
                 'position' => $s->position,
                 'points' => $s->points,
                 'team' => $s->team?->name,
+                'teamId' => $s->team?->id,
                 'isMine' => (bool) $s->team?->is_mine,
             ]);
 

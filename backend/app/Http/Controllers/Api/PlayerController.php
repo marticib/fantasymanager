@@ -12,13 +12,12 @@ use App\Models\FantasyPlayer;
 use App\Models\FantasyTeam;
 use App\Models\FantasyTeamPlayer;
 use App\Services\ExternalData\SparklineHistoryBuilder;
-use App\Services\Recommendation\ClauseEconomicAnalysisService;
 use App\Services\Recommendation\MarketAuctionPremiumEstimator;
 use App\Services\Recommendation\MarketBuyAnalysisService;
 use App\Services\Recommendation\PlayerDecisionEngine;
 use App\Services\Recommendation\PlayerTrendPresenter;
 use App\Services\Recommendation\PlayerValueTrendCalculator;
-use App\Services\Recommendation\ValueObjects\ClauseEconomicAnalysis;
+use App\Services\Recommendation\RivalClausePresenter;
 use App\Services\Recommendation\ValueObjects\MarketBuyAnalysis;
 use App\Services\Recommendation\ValueObjects\PlayerDecisionResult;
 use Illuminate\Http\Request;
@@ -92,9 +91,11 @@ class PlayerController extends Controller
      *   the same one /team reads — never re-derived here.
      * - ON_MARKET: MarketBuyAnalysisService's buy verdict, the same one
      *   /market and "Avui" read.
-     * - OWNED_BY_RIVAL (with a clause): ClauseEconomicAnalysisService's
-     *   verdict, the same one /clauses reads.
-     * - FREE: no active engine applies — `decision` is null.
+     * - OWNED_BY_RIVAL (with a clause): RivalClausePresenter, wrapping
+     *   ClauseEconomicAnalysisService's verdict — the same one /clauses reads
+     *   and the one a rival team's roster page (TeamController::rival()) reuses.
+     * - FREE: MarketBuyAnalysisService's buy verdict, run hypothetically
+     *   against the player's own market value (no real listing to price against).
      *
      * `favors`/`risks` are the one genuinely new piece of logic here: short
      * deterministic bullets thresholded off each engine's *own* already-computed
@@ -111,7 +112,7 @@ class PlayerController extends Controller
         MarketBuyAnalysisService $buyAnalysisService,
         MarketAuctionPremiumEstimator $premiumEstimator,
         PlayerValueTrendCalculator $trendCalculator,
-        ClauseEconomicAnalysisService $clauseAnalysisService,
+        RivalClausePresenter $rivalClausePresenter,
     ) {
         $account = $this->currentAccount($request);
         $league = $account->activeLeague;
@@ -133,9 +134,7 @@ class PlayerController extends Controller
         $decision = match ($context) {
             'OWNED_BY_ME' => $this->rosterDecision($account, $player, $decisionEngine),
             'ON_MARKET' => $this->buyDecision($player, $listing, $league, $trendCalculator, $premiumEstimator, $buyAnalysisService, $externalTrend),
-            'OWNED_BY_RIVAL' => $teamPlayer?->clause_value !== null
-                ? $this->clauseDecision($player, $teamPlayer, $trendCalculator, $clauseAnalysisService, $externalTrend)
-                : null,
+            'OWNED_BY_RIVAL' => $teamPlayer ? $rivalClausePresenter->present($player, $teamPlayer, $externalTrend) : null,
             // Not on the market, but still analyzable hypothetically — reuses
             // the same buy engine so the page never has to say "not enough
             // data" just because nobody happens to be selling this player.
@@ -407,76 +406,6 @@ class PlayerController extends Controller
         }
         if ($buy->dataQuality < 60) {
             $risks[] = 'Historial de dades limitat.';
-        }
-
-        return ['favors' => $favors, 'risks' => $risks];
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function clauseDecision(
-        FantasyPlayer $player,
-        FantasyTeamPlayer $teamPlayer,
-        PlayerValueTrendCalculator $trendCalculator,
-        ClauseEconomicAnalysisService $clauseAnalysisService,
-        ?FantasyExternalTrend $externalTrend,
-    ): array {
-        $marketValue = (float) ($player->market_value ?? 0);
-        $clauseValue = (float) $teamPlayer->clause_value;
-        [$value1d, $value3d, $value7d] = $trendCalculator->historicalValues($player, $marketValue, $externalTrend);
-
-        $analysis = $clauseAnalysisService->analyze($marketValue, $clauseValue, $value1d, $value3d, $value7d);
-        $confidence = $trendCalculator->dataQuality($analysis->growth1d, $analysis->growth3d, $analysis->growth7d);
-
-        ['favors' => $favors, 'risks' => $risks] = $this->clauseFavorsRisks($analysis);
-
-        $isLocked = $teamPlayer->clause_locked_until !== null && $teamPlayer->clause_locked_until->isFuture();
-
-        return [
-            'type' => 'CLAUSE',
-            'action' => $analysis->economicRecommendation,
-            'mainScore' => $analysis->clauseEconomicScore,
-            'confidence' => $confidence,
-            'reason' => null,
-            'favors' => $favors,
-            'risks' => $risks,
-            'raw' => array_merge($analysis->toArray(), [
-                'isLocked' => $isLocked,
-                'daysUntilUnlock' => $isLocked ? (int) ceil(now()->diffInHours($teamPlayer->clause_locked_until) / 24) : null,
-            ]),
-            'projections' => ['value3d' => $analysis->expectedValue3d, 'value7d' => $analysis->expectedValue7d, 'value14d' => $analysis->expectedValue14d],
-        ];
-    }
-
-    /**
-     * @return array{favors: array<int, string>, risks: array<int, string>}
-     */
-    private function clauseFavorsRisks(ClauseEconomicAnalysis $analysis): array
-    {
-        $favors = [];
-        $risks = [];
-
-        if ($analysis->roi14d > 0) {
-            $favors[] = sprintf('ROI a 14 dies +%s%%.', number_format($analysis->roi14d * 100, 1));
-        }
-        if ($analysis->breakEvenDays !== null && $analysis->breakEvenDays <= 5) {
-            $favors[] = $analysis->breakEvenDays === 0 ? 'Ja recupera la prima avui mateix.' : sprintf('Break-even en %d dies.', $analysis->breakEvenDays);
-        }
-        if ($analysis->clausePremiumPct < 0.10) {
-            $favors[] = sprintf('Prima de clàusula baixa (%s%%).', number_format($analysis->clausePremiumPct * 100, 1));
-        }
-
-        if ($analysis->breakEvenDays === null) {
-            $risks[] = 'Sense break-even previst dins del termini simulat.';
-        } elseif ($analysis->breakEvenDays > 10) {
-            $risks[] = sprintf('Break-even llarg (%d dies).', $analysis->breakEvenDays);
-        }
-        if ($analysis->clausePremiumPct > 0.30) {
-            $risks[] = sprintf('Prima de clàusula elevada (%s%%).', number_format($analysis->clausePremiumPct * 100, 1));
-        }
-        if ($analysis->growth1d !== null && $analysis->growth1d < 0) {
-            $risks[] = 'Tendència de valor negativa.';
         }
 
         return ['favors' => $favors, 'risks' => $risks];

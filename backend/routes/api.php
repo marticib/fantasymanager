@@ -61,6 +61,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Standings
     Route::get('/standings', [StandingController::class, 'index']);
+    Route::get('/standings/{team}', [TeamController::class, 'rival']);
 
     // History
     Route::get('/history/team-value', [HistoryController::class, 'teamValue']);

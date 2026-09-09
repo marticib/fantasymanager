@@ -6,10 +6,12 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\FantasyPlayerResource;
 use App\Http\Resources\FantasyTeamResource;
 use App\Models\FantasyExternalTrend;
+use App\Models\FantasyTeam;
 use App\Services\Recommendation\FantasyScoreService;
 use App\Services\Recommendation\FantasySettingsService;
 use App\Services\Recommendation\PlayerDecisionEngine;
 use App\Services\Recommendation\PlayerTrendPresenter;
+use App\Services\Recommendation\RivalClausePresenter;
 use Illuminate\Http\Request;
 
 class TeamController extends Controller
@@ -71,6 +73,79 @@ class TeamController extends Controller
                 'cash' => $cash,
                 'availableCapital' => $availableCapital,
                 'minimumCashReserve' => (int) $rules['minimum_cash_reserve'],
+            ],
+            'players' => $players,
+        ]);
+    }
+
+    /**
+     * A rival team's full roster, reached from /standings — same per-player
+     * shape as show() (value, trend, sparkline, Fantasy Score), but the
+     * "what would I do" verdict is RivalClausePresenter's clause analysis,
+     * not PlayerDecisionEngine's HOLD/SELL/LOCK_CLAUSE: that engine answers
+     * "should I, the owner, hold or sell this player", which doesn't apply
+     * to a roster that isn't mine — only its clauses are actionable, exactly
+     * like the individual player page's own OWNED_BY_RIVAL context (reused
+     * here per player, not re-derived).
+     */
+    public function rival(Request $request, FantasyTeam $team, PlayerTrendPresenter $presenter, RivalClausePresenter $rivalClausePresenter)
+    {
+        $account = $this->currentAccount($request);
+
+        if ($team->is_mine || $team->fantasy_league_id !== $account->active_league_id) {
+            abort(404);
+        }
+
+        $externalTrends = FantasyExternalTrend::where('source', 'futbolfantasy')->get()->keyBy('fantasy_player_id');
+
+        $players = $team->teamPlayers()->with('player')->get()
+            ->map(function ($tp) use ($account, $externalTrends, $presenter, $rivalClausePresenter) {
+                if (! $tp->player) {
+                    return null;
+                }
+
+                $externalTrend = $externalTrends->get($tp->player->id);
+                $p = $presenter->present($tp->player, $account, $externalTrend);
+                $decision = $rivalClausePresenter->present($tp->player, $tp, $externalTrend);
+
+                return array_merge(
+                    (new FantasyPlayerResource($tp->player))->resolve(),
+                    [
+                        'clauseValue' => $tp->clause_value,
+                        'isLocked' => $tp->is_locked,
+                        // The league-scoped roster endpoint rivals are synced through
+                        // (FantasyTeamService::getLeagueTeamRoster()) never returns a
+                        // starter/bench split, unlike the own-team lineup endpoint —
+                        // always null here, never guessed.
+                        'isStarter' => null,
+                        'fantasyScore' => $p->score->total,
+                        'confidence' => $p->score->confidence,
+                        'trend' => $p->trend->toArray(),
+                        'externalTrend' => $p->externalTrendPayload(),
+                        'history' => $p->history,
+                        'historySource' => $p->historySource,
+                        'action' => $decision['action'] ?? null,
+                        'decision' => $decision,
+                    ],
+                );
+            })
+            ->filter()
+            ->values();
+
+        // fantasy_teams.team_value is only ever cached for the account's own
+        // team (FantasySyncService::syncTeam()) — a rival's isn't synced
+        // anywhere, so it's derived here with the exact same sum(marketValue)
+        // formula that sync uses, rather than left blank.
+        $teamValue = $team->team_value ?? $players->sum(fn (array $p) => $p['marketValue'] ?? 0);
+
+        return response()->json([
+            'team' => new FantasyTeamResource($team),
+            'summary' => [
+                'teamValue' => $teamValue,
+                // Cash has no data source for a rival at all — LaLiga only
+                // exposes the "money" endpoint for the account's own team
+                // (see FantasySyncService::syncTeam()) — never guessed.
+                'cash' => null,
             ],
             'players' => $players,
         ]);

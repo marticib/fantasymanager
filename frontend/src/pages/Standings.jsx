@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import apiClient from '../api/client'
 
 export default function Standings() {
@@ -30,7 +31,15 @@ export default function Standings() {
                 className={`border-b border-border last:border-0 ${row.isMine ? 'bg-accent/10' : ''}`}
               >
                 <td className="px-4 py-3">{row.position}</td>
-                <td className="px-4 py-3 font-medium">{row.team}</td>
+                <td className="px-4 py-3 font-medium">
+                  {row.teamId ? (
+                    <Link to={row.isMine ? '/team' : `/standings/${row.teamId}`} className="hover:text-accent hover:underline">
+                      {row.team}
+                    </Link>
+                  ) : (
+                    row.team
+                  )}
+                </td>
                 <td className="px-4 py-3">{row.points}</td>
               </tr>
             ))}
