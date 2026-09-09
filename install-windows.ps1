@@ -417,19 +417,22 @@ try {
 
 Write-Step "Installacio completada"
 Write-Host ""
-Write-Host "Per arrencar l'aplicacio manualment:" -ForegroundColor Cyan
-Write-Host "  1) Una terminal:  cd backend  ; php artisan serve"
-Write-Host "  2) Una altra:     cd frontend ; npm run dev"
-Write-Host "  3) Obre http://localhost:5173"
+Write-Host "Per arrencar l'aplicacio (backend + frontend + planificador de sincronitzacio):" -ForegroundColor Cyan
+Write-Host "  Fes doble clic a fantasy_manager.bat (arrel del repositori)" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Primer us: crea un compte a l'app i segueix l'assistent d'onboarding" -ForegroundColor DarkGray
 Write-Host "(necessitaras l'access_token d'una sessio ja iniciada a LaLiga Fantasy - mai la contrasenya)." -ForegroundColor DarkGray
+Write-Host "Un cop triada la lliga, executa una vegada 'php artisan fantasy:sync' (dins de backend) per" -ForegroundColor DarkGray
+Write-Host "tenir dades des del primer moment - fantasy_manager.bat ja deixa el planificador corrent per" -ForegroundColor DarkGray
+Write-Host "a les seguents actualitzacions, pero la primera carrega no espera el seu primer cicle." -ForegroundColor DarkGray
 Write-Host ""
 
-$launch = Read-Host "Vols que obri les dues terminals ara mateix i arrenqui els servidors? (s/N)"
+$launch = Read-Host "Vols arrencar l'aplicacio ara mateix (fantasy_manager.bat)? (s/N)"
 if ($launch -match '^[sSyY]') {
-    Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd `"$BackendDir`"; php artisan serve"
-    Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd `"$FrontendDir`"; npm run dev"
-    Start-Sleep -Seconds 3
-    Start-Process "http://localhost:5173"
+    $manager = Join-Path $RepoRoot 'fantasy_manager.bat'
+    if (Test-Path $manager) {
+        Start-Process $manager
+    } else {
+        Write-Warn "No s'ha trobat fantasy_manager.bat a $RepoRoot."
+    }
 }
