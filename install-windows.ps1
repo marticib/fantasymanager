@@ -190,6 +190,8 @@ $composerOk = Install-IfMissing -Command 'composer' -WingetId 'Composer.Composer
 # --- 2. Extensions de PHP -------------------------------------------------
 
 if ($phpOk) {
+    $phpDir = Split-Path -Parent (Get-Command php).Source
+
     Write-Step "Comprovant extensions de PHP (pdo_pgsql, mbstring, zip, fileinfo, openssl, curl)"
 
     $iniLine = (php --ini 2>$null | Select-String 'Loaded Configuration File:')
@@ -200,7 +202,6 @@ if ($phpOk) {
 
     if ((-not $iniPath) -or ($iniPath -eq '(none)') -or (-not (Test-Path $iniPath))) {
         # Installacio nova de PHP (zip): encara no hi ha php.ini, nomes les plantilles.
-        $phpDir = Split-Path -Parent (Get-Command php).Source
         $template = Join-Path $phpDir 'php.ini-development'
         if (Test-Path $template) {
             $iniPath = Join-Path $phpDir 'php.ini'
@@ -247,6 +248,48 @@ if ($phpOk) {
             }
         } else {
             Write-Ok "Totes les extensions necessaries ja estaven actives"
+        }
+    }
+
+    # --- 2b. Certificat CA per a peticions HTTPS (curl.cainfo/openssl.cafile) --
+    #
+    # PHP per a Windows (el zip oficial, i el paquet de winget que en surt) no
+    # porta cap magatzem de certificats CA propi - a diferencia de Linux/Mac,
+    # on cURL fa servir el de l'OS. Sense curl.cainfo/openssl.cafile configurats,
+    # QUALSEVOL peticio HTTPS via Guzzle (totes les crides a l'API de LaLiga i a
+    # futbolfantasy.com, incloent el login interactiu) falla amb un error de
+    # xarxa ("SSL certificate problem: unable to get local issuer certificate"),
+    # que aquesta app mostra com "No s'ha pogut contactar amb el servidor de
+    # login de LaLiga" - confirmat amb un cas real. cacert.pem es la propia
+    # distribucio de certificats CA que publica el projecte cURL per a aquest
+    # cas exacte.
+    if ($iniPath -and (Test-Path $iniPath)) {
+        Write-Step "Comprovant el certificat CA per a peticions HTTPS (curl.cainfo)"
+        $currentCainfo = (php -r "echo ini_get('curl.cainfo');" 2>$null)
+
+        if ($currentCainfo -and (Test-Path $currentCainfo)) {
+            Write-Ok "curl.cainfo ja apunta a un certificat valid ($currentCainfo)"
+        } else {
+            Write-Warn "curl.cainfo no configurat (o apunta a un fitxer inexistent) - descarregant cacert.pem..."
+            $caPath = Join-Path $phpDir 'cacert.pem'
+            try {
+                # PowerShell 5.1 pot no fer servir TLS 1.2 per defecte i fer
+                # fallar la descarrega mateixa amb un error de confianca SSL.
+                [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+                Invoke-WebRequest -Uri 'https://curl.se/ca/cacert.pem' -OutFile $caPath -UseBasicParsing
+                $iniContent = Get-Content $iniPath | Where-Object {
+                    ($_ -notmatch '^\s*;?\s*curl\.cainfo\s*=') -and ($_ -notmatch '^\s*;?\s*openssl\.cafile\s*=')
+                }
+                $iniContent += "curl.cainfo = `"$caPath`""
+                $iniContent += "openssl.cafile = `"$caPath`""
+                Set-Content -Path $iniPath -Value $iniContent -Encoding ASCII
+                Write-Ok "Certificat CA descarregat i configurat ($caPath)"
+            } catch {
+                Write-ErrorMsg "No s'ha pogut descarregar el certificat CA automaticament ($($_.Exception.Message))."
+                Write-Host "    Descarrega'l manualment de https://curl.se/ca/cacert.pem i afegeix aquestes dues linies a $iniPath :" -ForegroundColor Red
+                Write-Host "    curl.cainfo = `"C:\ruta\on\el\guardis\cacert.pem`"" -ForegroundColor Red
+                Write-Host "    openssl.cafile = `"C:\ruta\on\el\guardis\cacert.pem`"" -ForegroundColor Red
+            }
         }
     }
 }
