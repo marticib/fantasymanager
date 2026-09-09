@@ -29,6 +29,13 @@ $RepoRoot    = Split-Path -Parent $MyInvocation.MyCommand.Path
 $BackendDir  = Join-Path $RepoRoot 'backend'
 $FrontendDir = Join-Path $RepoRoot 'frontend'
 
+# Contrasenya local de desenvolupament que aquest script fa servir per a una
+# installacio *propia* de PostgreSQL (via --override al winget install, mes
+# avall) i per omplir un DB_PASSWORD buit a backend\.env - mai toca un
+# DB_PASSWORD que ja tingui algun valor (un servidor PostgreSQL preexistent
+# pot tenir una contrasenya real diferent).
+$PgPassword = 'postgres'
+
 function Write-Step {
     param([string]$Msg)
     Write-Host ""
@@ -61,6 +68,19 @@ function Update-SessionPath {
     $machine = [System.Environment]::GetEnvironmentVariable('Path', 'Machine')
     $user    = [System.Environment]::GetEnvironmentVariable('Path', 'User')
     $env:Path = "$machine;$user"
+}
+
+function Test-PortOpen {
+    param([string]$ComputerName, [int]$Port, [int]$TimeoutMs = 800)
+    try {
+        $client = New-Object System.Net.Sockets.TcpClient
+        $result = $client.BeginConnect($ComputerName, $Port, $null, $null)
+        $ok = $result.AsyncWaitHandle.WaitOne($TimeoutMs) -and $client.Connected
+        $client.Close()
+        return [bool]$ok
+    } catch {
+        return $false
+    }
 }
 
 function Install-IfMissing {
@@ -124,8 +144,46 @@ if (-not $isAdmin) {
 
 # --- 1. Prerequisits -----------------------------------------------------
 
-$nodeOk     = Install-IfMissing -Command 'node'    -WingetId 'OpenJS.NodeJS.LTS'         -FriendlyName 'Node.js'    -ManualUrl 'https://nodejs.org/'
-$pgOk       = Install-IfMissing -Command 'psql'    -WingetId 'PostgreSQL.PostgreSQL.16'  -FriendlyName 'PostgreSQL' -ManualUrl 'https://www.postgresql.org/download/windows/'
+$nodeOk = Install-IfMissing -Command 'node' -WingetId 'OpenJS.NodeJS.LTS' -FriendlyName 'Node.js' -ManualUrl 'https://nodejs.org/'
+
+# PostgreSQL te un cas propi, no Install-IfMissing generic, per dos motius
+# reals detectats amb winget:
+#   1. L'instal.lador d'EDB (el que hi ha darrere del paquet de winget) pot
+#      quedar-se esperant una contrasenya de superusuari interactiva encara
+#      que winget s'executi amb --accept-*-agreements -> cal passar-li-la
+#      explicitament amb --override en mode "unattended".
+#   2. Confirmat amb un cas real: winget ha informat "no ha pogut installar
+#      PostgreSQL" dues execucions seguides, pero un servidor real ja
+#      escoltava al port 5432 (exigint contrasenya) - probablement winget
+#      interpreta un codi de sortida no-zero benigne de l'instal.lador d'EDB
+#      com a fallada. Comprovar nomes 'psql' al PATH no detecta aquest cas
+#      (el PATH d'aquesta sessio pot no incloure'l igualment) i acaba
+#      reintentant una installacio que, de fet, ja hi es.
+Write-Step "Comprovant PostgreSQL"
+$pgServerUp = Test-PortOpen -ComputerName '127.0.0.1' -Port 5432
+if (Test-Command 'psql') {
+    Write-Ok "PostgreSQL ja instalat"
+    $pgOk = $true
+} elseif ($pgServerUp) {
+    Write-Warn "'psql' no es troba al PATH d'aquesta sessio, pero ja hi ha un servidor PostgreSQL actiu al port 5432."
+    Write-Warn "S'assumeix que ja esta instal.lat (winget de vegades informa d'un error encara que la installacio hagi funcionat) - no es reinstal.la."
+    $pgOk = $true
+} else {
+    Write-Warn "PostgreSQL no trobat. Installant amb winget (PostgreSQL.PostgreSQL.16)..."
+    $pgOverride = "--mode unattended --unattendedmodeui minimal --superpassword $PgPassword --serverport 5432 --disable-components stackbuilder"
+    $wingetOutput = & winget install --id 'PostgreSQL.PostgreSQL.16' -e --accept-package-agreements --accept-source-agreements --silent --override $pgOverride 2>&1 | Out-String
+    Write-Host $wingetOutput
+    Update-SessionPath
+    Start-Sleep -Seconds 2
+    if ((Test-Command 'psql') -or (Test-PortOpen -ComputerName '127.0.0.1' -Port 5432)) {
+        Write-Ok "PostgreSQL instalat correctament (usuari 'postgres', contrasenya local per defecte: $PgPassword)"
+        $pgOk = $true
+    } else {
+        Write-ErrorMsg "winget no ha pogut installar PostgreSQL. Installa'l manualment: https://www.postgresql.org/download/windows/"
+        $pgOk = $false
+    }
+}
+
 $phpOk      = Install-IfMissing -Command 'php'     -WingetId 'PHP.PHP.8.4'               -FriendlyName 'PHP'        -ManualUrl 'https://windows.php.net/download/'
 $composerOk = Install-IfMissing -Command 'composer' -WingetId 'Composer.Composer'        -FriendlyName 'Composer'   -ManualUrl 'https://getcomposer.org/download/'
 
@@ -195,12 +253,18 @@ if ($phpOk) {
 
 # --- 3. Base de dades ------------------------------------------------------
 
+# Provem amb la contrasenya local per defecte que fem servir per a una
+# installacio propia (pas anterior) - sense aixo, 'psql' es queda penjat
+# demanant la contrasenya interactivament si el servidor l'exigeix, cosa que
+# aqui no te sortida (no hi ha cap terminal esperant escriure-la).
+$env:PGPASSWORD = $PgPassword
+
 Write-Step "Comprovant la base de dades 'fantasy' a PostgreSQL"
 if (Test-Command 'psql') {
     $exists = & psql -U postgres -tAc "SELECT 1 FROM pg_database WHERE datname='fantasy'" 2>$null
     if ($LASTEXITCODE -ne 0) {
-        Write-Warn "No s'ha pogut connectar a PostgreSQL amb l'usuari 'postgres'."
-        Write-Warn "PostgreSQL et pot demanar la contrasenya interactivament - crea la base de dades manualment si cal:"
+        Write-Warn "No s'ha pogut connectar a PostgreSQL amb l'usuari 'postgres' i la contrasenya per defecte ($PgPassword)."
+        Write-Warn "Si el servidor ja existia d'abans amb una altra contrasenya, crea la base de dades manualment:"
         Write-Warn "    createdb -U postgres fantasy"
     } elseif ($exists -match '1') {
         Write-Ok "La base de dades 'fantasy' ja existeix"
@@ -228,6 +292,18 @@ try {
         Write-Ok ".env ja existeix - no es sobreescriu"
     }
 
+    # .env.example porta DB_PASSWORD buit -> un servidor PostgreSQL que
+    # exigeix contrasenya (el cas normal) fa fallar "migrate" amb
+    # "no password supplied" encara que tot la resta estigui be. Nomes
+    # s'omple si esta buida - mai se sobreescriu una contrasenya real que
+    # l'usuari ja hagi posat (p. ex. un servidor PostgreSQL preexistent amb
+    # una altra contrasenya).
+    $envContent = Get-Content '.env'
+    if ($envContent -match '^DB_PASSWORD=\s*$') {
+        ($envContent -replace '^DB_PASSWORD=\s*$', "DB_PASSWORD=$PgPassword") | Set-Content '.env'
+        Write-Ok "DB_PASSWORD buida a .env -> establerta a la contrasenya local per defecte ($PgPassword)"
+    }
+
     if (Test-Command 'composer') {
         Write-Host "    Installant dependencies PHP (composer install)..." -ForegroundColor DarkGray
         composer install --no-interaction
@@ -253,7 +329,8 @@ try {
         if ($LASTEXITCODE -eq 0) {
             Write-Ok "Migracions executades"
         } else {
-            Write-Warn "No s'han pogut executar les migracions - revisa la connexio a PostgreSQL a backend\.env (DB_HOST, DB_USERNAME, DB_PASSWORD)."
+            Write-Warn "No s'han pogut executar les migracions - revisa backend\.env (DB_HOST, DB_USERNAME, DB_PASSWORD) contra la contrasenya real del teu servidor PostgreSQL."
+            Write-Warn "Si el missatge de dalt diu 'no password supplied' o 'password authentication failed', DB_PASSWORD a backend\.env no coincideix amb la contrasenya real del servidor - edita'l manualment."
         }
     } elseif (Test-Command 'php') {
         # composer install ha fallat mes amunt -> no hi ha vendor/autoload.php.
