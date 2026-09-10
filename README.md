@@ -136,6 +136,8 @@ LaLiga Fantasy fa servir OAuth2 / Azure AD B2C. Un "Connectar amb LaLiga" d'un s
 
 En qualsevol dels tres casos, l'app **no implementa mai el login amb contrasenya** (evitem tocar la teva contrasenya de LaLiga) i, un cop desat el `refresh_token`, el manté viu automàticament (`FantasyAuthService::refresh()`, amb el `client_id` que va emetre els tokens) sense que hagis de tornar a fer-ho cada dia.
 
+**Desconnectar la sessió**: `/settings` té una secció "Compte de LaLiga Fantasy" amb un botó "Desconnectar LaLiga Fantasy" (amb confirmació d'un sol pas, sense diàleg natiu del navegador) que crida `DELETE /fantasy-account` (`FantasyAccountController::destroy()`, ja existent al backend) — buida només `access_token`/`refresh_token`/`token_client_id`/`token_expires_at`, mai la resta de dades ja sincronitzades (jugadors, mercat, historial), i et torna a `/onboarding` per tornar a connectar. Fins ara l'endpoint no tenia cap botó que el cridés — l'única manera de tornar a connectar una sessió trencada (p. ex. per un `APP_KEY` rotat, vegeu més amunt) era editant la base de dades a mà.
+
 ## Sincronització
 
 Comandes disponibles (totes accepten `--account=<id>` per limitar-les a un compte):
@@ -370,7 +372,7 @@ cd backend
 php artisan test
 ```
 
-215 tests, sense dependència de l'API real (`Http::fake()` a `FantasyApiClient`, `FantasyClauseService`; base de dades SQLite en memòria via `phpunit.xml`). Cobreixen: `FantasyApiClient` (401/refresh, 429, 5xx), `TrendAnalysisService`, `FantasyScoreService`, `MarketValueProjector`, `ClauseEconomicAnalysisService`, `ClauseOpportunityService`, `PlayerDecisionEngine`, `MarketBuyAnalysisService`, `MarketAuctionPremiumEstimator`, `TodayActionsService`, `PlayerController` (Feature — context OWNED_BY_ME/ON_MARKET/OWNED_BY_RIVAL/FREE), `RivalTeamController` (Feature — `/standings/{team}`: veredicte de clàusula, 404 per al propi equip i per equips fora de la lliga activa, `isStarter`/saldo sempre `null`, `teamValue` amb fallback), `HistoryController` (Feature — valor+saldo+backtesting), `FantasySnapshotDecisionsCommand` i `FantasyEvaluateDecisionsCommand` (Feature — sense look-ahead, sense recalcular amb config actual), el motor de recomanacions (compra/venda/mantenir + límit de capital), i `FantasySettingsService`.
+217 tests, sense dependència de l'API real (`Http::fake()` a `FantasyApiClient`, `FantasyClauseService`; base de dades SQLite en memòria via `phpunit.xml`). Cobreixen: `FantasyApiClient` (401/refresh, 429, 5xx), `TrendAnalysisService`, `FantasyScoreService`, `MarketValueProjector`, `ClauseEconomicAnalysisService`, `ClauseOpportunityService`, `PlayerDecisionEngine`, `MarketBuyAnalysisService`, `MarketAuctionPremiumEstimator`, `TodayActionsService`, `PlayerController` (Feature — context OWNED_BY_ME/ON_MARKET/OWNED_BY_RIVAL/FREE), `RivalTeamController` (Feature — `/standings/{team}`: veredicte de clàusula, 404 per al propi equip i per equips fora de la lliga activa, `isStarter`/saldo sempre `null`, `teamValue` amb fallback), `HistoryController` (Feature — valor+saldo+backtesting), `FantasySnapshotDecisionsCommand` i `FantasyEvaluateDecisionsCommand` (Feature — sense look-ahead, sense recalcular amb config actual), el motor de recomanacions (compra/venda/mantenir + límit de capital), i `FantasySettingsService`.
 
 ## Docker
 

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import apiClient from '../api/client'
 
 const RULE_LABELS = {
@@ -22,17 +23,36 @@ const WEIGHT_LABELS = {
 }
 
 export default function Settings() {
+  const navigate = useNavigate()
   const [rules, setRules] = useState(null)
   const [weights, setWeights] = useState(null)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
+
+  const [account, setAccount] = useState(null)
+  const [confirmDisconnect, setConfirmDisconnect] = useState(false)
+  const [disconnecting, setDisconnecting] = useState(false)
 
   useEffect(() => {
     apiClient.get('/settings').then((res) => {
       setRules(res.data.rules)
       setWeights(res.data.scoreWeights)
     })
+    apiClient
+      .get('/fantasy-account')
+      .then((res) => setAccount(res.data))
+      .catch(() => {})
   }, [])
+
+  const disconnect = async () => {
+    setDisconnecting(true)
+    try {
+      await apiClient.delete('/fantasy-account')
+      navigate('/onboarding')
+    } finally {
+      setDisconnecting(false)
+    }
+  }
 
   const save = async () => {
     setSaving(true)
@@ -55,6 +75,49 @@ export default function Settings() {
     <div>
       <h1 className="text-2xl font-bold tracking-tight">Configuració</h1>
       <p className="mt-1 text-sm text-text-muted">Ajusta els llindars i pesos del motor de recomanacions.</p>
+
+      <section className="mt-6 rounded-2xl border border-border bg-surface p-6">
+        <h2 className="font-semibold">Compte de LaLiga Fantasy</h2>
+        {account?.hasTokens ? (
+          <p className="mt-1 text-sm text-text-muted">
+            Connectat{account.nickname ? ` com a ${account.nickname}` : ''}.
+          </p>
+        ) : (
+          <p className="mt-1 text-sm text-text-muted">No hi ha cap sessió de LaLiga Fantasy connectada.</p>
+        )}
+        <p className="mt-3 text-xs text-text-muted">
+          Desconnectar només esborra la sessió de LaLiga (els tokens) — la resta de dades ja sincronitzades
+          (jugadors, mercat, historial) no es toquen. Després caldrà tornar a connectar el compte des de
+          l'onboarding.
+        </p>
+
+        {!confirmDisconnect ? (
+          <button
+            onClick={() => setConfirmDisconnect(true)}
+            className="mt-4 rounded-lg border border-sell/40 px-4 py-2 text-sm font-semibold text-sell hover:bg-sell/10"
+          >
+            Desconnectar LaLiga Fantasy
+          </button>
+        ) : (
+          <div className="mt-4 flex items-center gap-2">
+            <span className="text-sm text-text-muted">Segur?</span>
+            <button
+              onClick={disconnect}
+              disabled={disconnecting}
+              className="rounded-lg bg-sell px-4 py-2 text-sm font-semibold text-bg hover:opacity-90 disabled:opacity-50"
+            >
+              {disconnecting ? 'Desconnectant…' : 'Sí, desconnectar'}
+            </button>
+            <button
+              onClick={() => setConfirmDisconnect(false)}
+              disabled={disconnecting}
+              className="rounded-lg border border-border px-4 py-2 text-sm text-text-muted hover:text-text disabled:opacity-50"
+            >
+              Cancel·lar
+            </button>
+          </div>
+        )}
+      </section>
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
         <section className="rounded-2xl border border-border bg-surface p-6">
