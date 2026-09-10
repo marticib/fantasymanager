@@ -8,6 +8,7 @@ use App\Services\FantasyApi\Exceptions\FantasyApiAuthenticationException;
 use App\Services\FantasyApi\FantasyAuthService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
@@ -146,5 +147,38 @@ class FantasyAuthServiceOAuthTest extends TestCase
         (new FantasyAuthService)->refresh($account);
 
         Http::assertSent(fn (Request $r) => $r['client_id'] === config('fantasy.auth.refresh_client_id'));
+    }
+
+    /**
+     * Regression test for a real incident: re-running the Windows installer
+     * called `key:generate` again, rotating APP_KEY and leaving every
+     * already-stored access_token/refresh_token undecryptable under the new
+     * key. That must degrade to "please reconnect" (hasValidTokens() false,
+     * a clean FantasyApiAuthenticationException), never an uncaught
+     * DecryptException crashing the sync command.
+     */
+    public function test_a_token_encrypted_under_a_different_app_key_is_treated_as_no_tokens(): void
+    {
+        $account = FantasyAccount::create([
+            'user_id' => User::factory()->create()->id,
+            'token_expires_at' => now()->addHours(12),
+        ]);
+
+        // Bypasses the model's 'encrypted' cast entirely — simulates a value
+        // that was validly encrypted once, just under an APP_KEY that no
+        // longer matches the one configured now (a raw un-decryptable string
+        // has the exact same effect as ciphertext under the wrong key: the
+        // Encrypter's MAC check fails either way).
+        DB::table('fantasy_accounts')->where('id', $account->id)->update([
+            'access_token' => 'not-a-valid-ciphertext',
+            'refresh_token' => 'not-a-valid-ciphertext-either',
+        ]);
+
+        $fresh = $account->fresh();
+
+        $this->assertFalse($fresh->hasValidTokens());
+
+        $this->expectException(FantasyApiAuthenticationException::class);
+        (new FantasyAuthService)->getValidAccessToken($fresh);
     }
 }

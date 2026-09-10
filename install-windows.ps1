@@ -361,11 +361,27 @@ try {
 
     $vendorAutoload = Join-Path $BackendDir 'vendor\autoload.php'
     if ((Test-Command 'php') -and (Test-Path $vendorAutoload)) {
-        php artisan key:generate --ansi
-        if ($LASTEXITCODE -eq 0) {
-            Write-Ok "Clau d'aplicacio generada"
+        # key:generate overwrites APP_KEY unconditionally, every time it runs,
+        # with no confirmation outside a "production" APP_ENV (confirmed live)
+        # - re-running this installer (e.g. after fixing an earlier step) was
+        # silently rotating APP_KEY on every run, which makes every already-
+        # encrypted column (FantasyAccount.access_token/refresh_token, cast
+        # 'encrypted') undecryptable under the new key ("The MAC is invalid",
+        # a DecryptException) even though the LaLiga session itself never
+        # changed. Only ever generate it once, the first time .env has no
+        # real key yet - never touch an APP_KEY that's already set.
+        $envPath = Join-Path $BackendDir '.env'
+        $hasAppKey = (Get-Content $envPath) -match '^APP_KEY=.+'
+
+        if ($hasAppKey) {
+            Write-Ok "APP_KEY ja existeix - no es regenera (evitaria invalidar la sessio de LaLiga ja desada)"
         } else {
-            Write-Warn "No s'ha pogut generar la clau d'aplicacio."
+            php artisan key:generate --ansi
+            if ($LASTEXITCODE -eq 0) {
+                Write-Ok "Clau d'aplicacio generada"
+            } else {
+                Write-Warn "No s'ha pogut generar la clau d'aplicacio."
+            }
         }
 
         php artisan migrate --force

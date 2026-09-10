@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -72,6 +73,15 @@ class FantasyAccount extends Model
 
     public function hasValidTokens(): bool
     {
-        return filled($this->access_token) && filled($this->refresh_token);
+        try {
+            return filled($this->access_token) && filled($this->refresh_token);
+        } catch (DecryptException) {
+            // APP_KEY changed since these were encrypted (e.g. a stale
+            // key:generate re-run) — the stored session is permanently
+            // unrecoverable, exactly like having no tokens at all: treat it
+            // as "please reconnect", never let the raw decrypt exception
+            // surface as an uncaught crash from every place that reads it.
+            return false;
+        }
     }
 }
