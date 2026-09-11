@@ -78,6 +78,17 @@ class PlayerDecisionEngine
      */
     private const LOCK_CLAUSE_TREND_BAND = 0.01;
 
+    /**
+     * Raising a clause by €X costs €X/2 — i.e. paying €1M raises the clause
+     * by €2M. Confirmed by a real player of the game, not the raw API
+     * (`FantasyClauseService::increaseClause()`'s `factor`/`valueToIncrease`
+     * were never reverse-engineered live — see the clauseTiming() docblock),
+     * so treated as reliable domain knowledge rather than an API-verified
+     * fact, same distinction the rest of this app's docblocks are careful
+     * to draw.
+     */
+    private const CLAUSE_RAISE_COST_RATIO = 0.5;
+
     public function __construct(
         private readonly FantasyScoreService $scoreService,
         private readonly FantasySettingsService $settings,
@@ -161,6 +172,7 @@ class PlayerDecisionEngine
         $hasTrendData = $growth1d !== null || $growth3d !== null || $growth7d !== null;
 
         $expectedValue7d = $this->projector->project($marketValue, $dailyGrowth, 7);
+        $expectedValue14d = $this->projector->project($marketValue, $dailyGrowth, 14);
         $marketScore = $this->scoreFromBounds($dailyGrowth, self::MARKET_TREND_DAILY_BOUNDS);
 
         $currentMatchday = $account->current_matchday;
@@ -256,7 +268,7 @@ class PlayerDecisionEngine
         $naturalAction = ($scores[$ranked[0]] - $scores[$ranked[1]]) >= $margin ? $ranked[0] : 'HOLD';
         $shouldRaiseClause = $naturalAction === 'LOCK_CLAUSE';
 
-        $clauseTiming = $this->clauseTiming($teamPlayer, $shouldRaiseClause, $clauseScore);
+        $clauseTiming = $this->clauseTiming($teamPlayer, $shouldRaiseClause, $clauseScore, $marketValue, $clauseValue, $expectedValue14d);
         $action = ($shouldRaiseClause && ! $clauseTiming['shouldRaiseNow']) ? 'HOLD' : $naturalAction;
 
         $sellReasonCode = null;
@@ -711,14 +723,44 @@ class PlayerDecisionEngine
      * if the clause isn't currently locked at all (nothing left to wait
      * for). Recomputed from scratch on every call — nothing here is a
      * stored decision from an earlier evaluation.
+     *
+     * Also computes two self-derived raise targets — deliberately never
+     * presented as a LaLiga-confirmed cap or cost: the real semantics of
+     * `FantasyClauseService::increaseClause()`'s `factor`/`valueToIncrease`
+     * were never reverse-engineered against the live API (unlike everything
+     * else this engine relies on), so there is no known real ceiling to
+     * report. Both targets are therefore this app's own economic opinion:
+     *  - `profitableTarget`: never raise past what the player is actually
+     *    projected to be worth in 14 days (`expectedValue14d`, the same
+     *    projector every other engine uses) — raising further just ties up
+     *    capital for a protection level the player's own trajectory doesn't
+     *    support. Can come out *below* the current clause (a real, useful
+     *    signal: the clause is already priced above what's rentable).
+     *  - `antiTheftTarget`: `marketValue` grown by `THEFT_PREMIUM_BOUNDS`'
+     *    upper bound (+50%) — the exact premium level `theftRiskScore()`
+     *    already treats as negligible risk, just expressed here in euros
+     *    instead of only as an internal 0-100 score.
+     * Each target also carries its `*Cost` — what raising the clause from
+     * its *current* value up to that target actually takes out of your
+     * cash, using CLAUSE_RAISE_COST_RATIO (0 when the target is already at
+     * or below the current clause — nothing to raise).
      */
-    private function clauseTiming(FantasyTeamPlayer $teamPlayer, bool $shouldRaiseClause, float $clauseScore): array
-    {
+    private function clauseTiming(
+        FantasyTeamPlayer $teamPlayer,
+        bool $shouldRaiseClause,
+        float $clauseScore,
+        float $marketValue,
+        ?float $clauseValue,
+        float $expectedValue14d,
+    ): array {
         $lockedUntil = $teamPlayer->clause_locked_until;
         $isLocked = $lockedUntil !== null && $lockedUntil->isFuture();
         $hoursRemaining = $isLocked ? now()->diffInHours($lockedUntil) : null;
         $thresholdHours = 24 + (float) config('fantasy.player_decision.clause_timing.safety_margin_hours');
         $shouldRaiseNow = $shouldRaiseClause && (! $isLocked || $hoursRemaining <= $thresholdHours);
+
+        $profitableTarget = $clauseValue !== null ? (int) round($expectedValue14d) : null;
+        $antiTheftTarget = $clauseValue !== null ? (int) round($marketValue * (1 + self::THEFT_PREMIUM_BOUNDS[1])) : null;
 
         return [
             'score' => (int) round($this->clamp($clauseScore, 0, 100)),
@@ -733,7 +775,27 @@ class PlayerDecisionEngine
                 $shouldRaiseNow => 'NOW',
                 default => 'LAST_PROTECTED_DAY',
             },
+            'profitableTarget' => $profitableTarget,
+            'profitableTargetCost' => $this->clauseRaiseCost($clauseValue, $profitableTarget),
+            'antiTheftTarget' => $antiTheftTarget,
+            'antiTheftTargetCost' => $this->clauseRaiseCost($clauseValue, $antiTheftTarget),
         ];
+    }
+
+    /**
+     * What it actually costs to raise the clause from its current value up
+     * to $target, per CLAUSE_RAISE_COST_RATIO — 0 when $target doesn't
+     * require raising it at all (already there or below).
+     */
+    private function clauseRaiseCost(?float $currentClause, ?int $target): ?int
+    {
+        if ($currentClause === null || $target === null) {
+            return null;
+        }
+
+        $increase = $target - $currentClause;
+
+        return $increase > 0 ? (int) round($increase * self::CLAUSE_RAISE_COST_RATIO) : 0;
     }
 
     private function explain(string $action, array $metrics, array $trade, array $clauseTiming, ?string $sellReasonCode): string
@@ -756,6 +818,7 @@ class PlayerDecisionEngine
                     ? sprintf('Encara falten %d %s de protecció — no gastis diners abans d\'hora.', $clauseTiming['daysRemaining'], $clauseTiming['daysRemaining'] === 1 ? 'dia' : 'dies')
                     : null,
                 'Es recomana pujar-la l\'últim dia abans que quedi exposat.',
+                $this->clauseTargetsSentence($clauseTiming),
             ]));
         }
 
@@ -782,6 +845,7 @@ class PlayerDecisionEngine
                 ($clauseTiming['locked'] ?? false)
                     ? 'El període de protecció està a punt d\'acabar — puja-la abans que quedi exposat.'
                     : 'Ja no té cap protecció activa — puja-la per blindar-la com més aviat millor.',
+                $this->clauseTargetsSentence($clauseTiming),
             ]),
             default => $metrics['lowData']
                 ? [
@@ -798,6 +862,29 @@ class PlayerDecisionEngine
         };
 
         return implode("\n", $lines ?: ['Sense canvis rellevants respecte a la situació actual.']);
+    }
+
+    /**
+     * @return string|null null when there's no clause at all to raise a target for
+     */
+    private function clauseTargetsSentence(array $clauseTiming): ?string
+    {
+        $profitable = $clauseTiming['profitableTarget'] ?? null;
+        $antiTheft = $clauseTiming['antiTheftTarget'] ?? null;
+        $profitableCost = $clauseTiming['profitableTargetCost'] ?? null;
+        $antiTheftCost = $clauseTiming['antiTheftTargetCost'] ?? null;
+
+        if ($profitable === null || $antiTheft === null) {
+            return null;
+        }
+
+        return sprintf(
+            'Clàusula rendible fins a %s (%s, no superar el valor projectat a 14 dies) i anti-robatori a partir de %s (%s, risc de robatori pràcticament nul).',
+            $this->formatMoney($profitable),
+            $profitableCost > 0 ? sprintf('et costaria %s', $this->formatMoney($profitableCost)) : 'ja hi ets',
+            $this->formatMoney($antiTheft),
+            $antiTheftCost > 0 ? sprintf('et costaria %s', $this->formatMoney($antiTheftCost)) : 'ja hi ets',
+        );
     }
 
     private function formatMoney(float $value): string

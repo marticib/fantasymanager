@@ -559,6 +559,53 @@ class PlayerDecisionEngineTest extends TestCase
         $this->assertSame('HOLD', $result->action);
     }
 
+    /**
+     * Two self-computed raise targets, never a LaLiga-confirmed cap (that
+     * mechanic was never reverse-engineered against the real API): a
+     * "rentable" ceiling pegged to the 14-day value projection, and an
+     * "anti-robatori" floor pegged to the same +50% premium
+     * THEFT_PREMIUM_BOUNDS already treats as negligible theft risk
+     * internally — now surfaced as an actual euro figure.
+     */
+    public function test_clause_timing_6_raise_targets_are_computed_from_market_value_and_14d_projection(): void
+    {
+        ['account' => $account, 'team' => $team] = $this->setupAccount(cash: 20_000_000);
+
+        $player = $this->ownPlayer($team, 'Cheap Clause Far From Unlock', [
+            'position' => 'MF', 'market_value' => 20_000_000, 'average_points' => 6.0, 'points' => 60, 'status' => 'ok',
+        ], clauseValue: 20_200_000, teamPlayerAttrs: ['clause_locked_until' => Carbon::now()->addDays(10)]);
+        $this->riseSnapshots($player, 20_000_000, [1 => 1.01, 3 => 1.01 ** 3, 7 => 1.01 ** 7]);
+
+        $result = $this->engine()->evaluateRoster($account)->get($player->id);
+
+        // Anti-theft target is an exact, deterministic formula: marketValue * 1.5.
+        $this->assertSame(30_000_000, $result->clauseTiming['antiTheftTarget']);
+        // Profitable target tracks the 14d projection — rising here, so above market value.
+        $this->assertGreaterThan(20_000_000, $result->clauseTiming['profitableTarget']);
+        // Cost is half the increase (paying X raises the clause by 2X): (30,000,000 - 20,200,000) * 0.5.
+        $this->assertSame(4_900_000, $result->clauseTiming['antiTheftTargetCost']);
+        // The HOLD-but-not-yet reason should mention both, in euros, not just as scores.
+        $this->assertStringContainsString('rendible', $result->reason);
+        $this->assertStringContainsString('anti-robatori', $result->reason);
+        $this->assertStringContainsString('et costaria', $result->reason);
+    }
+
+    /** A target already at or below the current clause needs no raise — cost is 0, never negative. */
+    public function test_clause_timing_6b_a_target_already_reached_costs_nothing(): void
+    {
+        ['account' => $account, 'team' => $team] = $this->setupAccount(cash: 20_000_000);
+
+        // Clause already well above marketValue * 1.5 (20M * 1.5 = 30M) -> anti-theft target is already met.
+        $player = $this->ownPlayer($team, 'Already Over-Protected', [
+            'position' => 'MF', 'market_value' => 20_000_000, 'average_points' => 6.0, 'points' => 60, 'status' => 'ok',
+        ], clauseValue: 35_000_000, teamPlayerAttrs: ['clause_locked_until' => Carbon::now()->addDays(10)]);
+        $this->riseSnapshots($player, 20_000_000, [1 => 1.01, 3 => 1.01 ** 3, 7 => 1.01 ** 7]);
+
+        $result = $this->engine()->evaluateRoster($account)->get($player->id);
+
+        $this->assertSame(0, $result->clauseTiming['antiTheftTargetCost']);
+    }
+
     public function test_clause_timing_2_the_last_protected_day_triggers_raise_clause_now(): void
     {
         ['account' => $account, 'team' => $team] = $this->setupAccount(cash: 20_000_000);

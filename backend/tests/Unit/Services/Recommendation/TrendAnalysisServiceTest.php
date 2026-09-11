@@ -75,6 +75,29 @@ class TrendAnalysisServiceTest extends TestCase
         $this->assertFalse($trend->isFalling());
     }
 
+    /** pctChange24h — the % counterpart of the existing money-delta change24h, same shape as pctChange3d/pctChange7d. */
+    public function test_pct_change_24h_is_computed_the_same_way_as_pct_change_3d_and_7d(): void
+    {
+        Carbon::setTestNow('2026-08-13 12:00:00');
+
+        // 500k -> 550k over the last 24h = +10%.
+        $player = $this->playerWithSnapshots([3 => 400_000, 1 => 500_000, 0 => 550_000]);
+
+        $trend = (new TrendAnalysisService)->analyze($player);
+
+        $this->assertSame(10.0, $trend->pctChange24h);
+    }
+
+    public function test_pct_change_24h_is_null_without_a_24h_old_snapshot(): void
+    {
+        $player = FantasyPlayer::create(['external_id' => uniqid(), 'name' => 'Just Connected']);
+        $player->snapshots()->create(['market_value' => 500_000, 'captured_at' => now()]);
+
+        $trend = (new TrendAnalysisService)->analyze($player);
+
+        $this->assertNull($trend->pctChange24h);
+    }
+
     public function test_no_snapshots_returns_low_confidence_estable_trend(): void
     {
         $player = FantasyPlayer::create(['external_id' => uniqid(), 'name' => 'No Data']);

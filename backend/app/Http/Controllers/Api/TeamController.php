@@ -12,12 +12,18 @@ use App\Services\Recommendation\FantasySettingsService;
 use App\Services\Recommendation\PlayerDecisionEngine;
 use App\Services\Recommendation\PlayerTrendPresenter;
 use App\Services\Recommendation\RivalClausePresenter;
+use App\Services\Recommendation\TeamValueDeltaService;
 use Illuminate\Http\Request;
 
 class TeamController extends Controller
 {
-    public function show(Request $request, PlayerTrendPresenter $presenter, FantasySettingsService $settings, PlayerDecisionEngine $decisionEngine)
-    {
+    public function show(
+        Request $request,
+        PlayerTrendPresenter $presenter,
+        FantasySettingsService $settings,
+        PlayerDecisionEngine $decisionEngine,
+        TeamValueDeltaService $teamValueDelta,
+    ) {
         $account = $this->currentAccount($request);
         $team = $account->activeTeam;
 
@@ -66,10 +72,14 @@ class TeamController extends Controller
             ->filter()
             ->values();
 
+        $delta24h = $teamValueDelta->since($team->id, now()->subDay());
+
         return response()->json([
             'team' => new FantasyTeamResource($team),
             'summary' => [
                 'teamValue' => $team->team_value,
+                'teamValueDelta24h' => $delta24h['delta'] ?? null,
+                'teamValueDelta24hPct' => $delta24h ? round(($delta24h['delta'] / $delta24h['pastTotal']) * 100, 2) : null,
                 'cash' => $cash,
                 'availableCapital' => $availableCapital,
                 'minimumCashReserve' => (int) $rules['minimum_cash_reserve'],

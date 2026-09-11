@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from 'recharts'
 import apiClient from '../api/client'
+import ChangeBadge from '../components/ChangeBadge'
 import { ChevronDownIcon, CheckIcon } from '../components/Icons'
 import { formatMoney, formatMoneyM, formatDelta, formatPercent, formatFullDate, formatDate, POSITION_LABELS, initials } from '../utils/format'
 
@@ -72,19 +73,6 @@ function StatCard({ label, value, hint, accent }) {
       <p className={`mt-2 text-2xl font-bold ${accent || ''}`}>{value}</p>
       {hint && <p className="mt-1 text-xs text-text-muted">{hint}</p>}
     </div>
-  )
-}
-
-function ChangeBadge({ change, changePct }) {
-  if (change === null || change === undefined) return <span className="text-xs text-text-muted">—</span>
-  const positive = change > 0
-  const neutral = change === 0
-  const colorClass = neutral ? 'text-text-muted' : positive ? 'text-buy' : 'text-sell'
-  return (
-    <span className={`text-xs font-semibold ${colorClass}`}>
-      {formatDelta(change)}
-      {changePct !== null && changePct !== undefined && <span className="text-text-muted"> ({formatPercent(changePct)})</span>}
-    </span>
   )
 }
 

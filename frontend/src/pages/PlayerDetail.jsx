@@ -431,6 +431,28 @@ export default function PlayerDetail() {
                       <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">Moment</p>
                       <p className="mt-1 text-lg font-bold">{raw.clauseTiming.recommendedExecution === 'NOW' ? 'Avui' : 'Últim dia segur'}</p>
                     </div>
+                    {raw.clauseTiming.profitableTarget != null && (
+                      <div className="rounded-xl border border-border p-3" title="No superar el valor projectat a 14 dies — recomanació pròpia, no un límit confirmat de LaLiga.">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-buy/80">Rendible fins a</p>
+                        <p className="mt-1 text-lg font-bold text-buy">{formatMoneyM(raw.clauseTiming.profitableTarget)}</p>
+                        <p className="mt-0.5 text-[10px] text-text-muted">
+                          {raw.clauseTiming.profitableTargetCost > 0
+                            ? `et costaria ${formatMoneyM(raw.clauseTiming.profitableTargetCost)}`
+                            : 'ja hi ets'}
+                        </p>
+                      </div>
+                    )}
+                    {raw.clauseTiming.antiTheftTarget != null && (
+                      <div className="rounded-xl border border-border p-3" title="Prima a partir de la qual el risc de robatori és pràcticament nul — recomanació pròpia, no un límit confirmat de LaLiga.">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-clause/80">Anti-robatori des de</p>
+                        <p className="mt-1 text-lg font-bold text-clause">{formatMoneyM(raw.clauseTiming.antiTheftTarget)}</p>
+                        <p className="mt-0.5 text-[10px] text-text-muted">
+                          {raw.clauseTiming.antiTheftTargetCost > 0
+                            ? `et costaria ${formatMoneyM(raw.clauseTiming.antiTheftTargetCost)}`
+                            : 'ja hi ets'}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
 

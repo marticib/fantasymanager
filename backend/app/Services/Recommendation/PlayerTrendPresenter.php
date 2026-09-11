@@ -66,8 +66,17 @@ class PlayerTrendPresenter
             return null;
         }
 
+        // A real euro figure from the external source itself — value_now/
+        // value_1d are the actual scraped values (data-valor1 etc.), never
+        // derived from pct_1d, so subtracting them isn't computing a new
+        // fact, just expressing the same real scrape in euros instead of %.
+        $delta1d = ($externalTrend->value_now !== null && $externalTrend->value_1d !== null)
+            ? (int) $externalTrend->value_now - (int) $externalTrend->value_1d
+            : null;
+
         return [
             'source' => $externalTrend->source,
+            'delta1d' => $delta1d,
             'pct1d' => $externalTrend->pct_1d !== null ? (float) $externalTrend->pct_1d : null,
             'pct3d' => $externalTrend->pct_3d !== null ? (float) $externalTrend->pct_3d : null,
             'pct7d' => $externalTrend->pct_7d !== null ? (float) $externalTrend->pct_7d : null,

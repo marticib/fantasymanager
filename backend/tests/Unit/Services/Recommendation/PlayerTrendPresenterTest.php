@@ -52,6 +52,44 @@ class PlayerTrendPresenterTest extends TestCase
         $this->assertSame(-15.0, $result->externalTrendPayload()['pct7d']);
     }
 
+    /**
+     * delta1d is a real scraped-euro figure (value_now - value_1d), never
+     * derived from pct_1d — confirms it's actually wired through, and that
+     * it's null (not a wrong number) when value_now wasn't captured.
+     */
+    public function test_external_payload_exposes_a_real_euro_delta1d(): void
+    {
+        $player = FantasyPlayer::create(['external_id' => uniqid(), 'name' => 'Has A Euro Delta', 'market_value' => 5_000_000]);
+        $external = FantasyExternalTrend::create([
+            'fantasy_player_id' => $player->id,
+            'source' => 'futbolfantasy',
+            'match_confidence' => 'exact',
+            'value_now' => 5_000_000,
+            'value_1d' => 4_940_000,
+            'fetched_at' => now(),
+        ]);
+
+        $result = $this->presenter()->present($player, FantasyAccount::create(['user_id' => User::factory()->create()->id]), $external);
+
+        $this->assertSame(60_000, $result->externalTrendPayload()['delta1d']);
+    }
+
+    public function test_external_payload_delta1d_is_null_without_a_real_value_now(): void
+    {
+        $player = FantasyPlayer::create(['external_id' => uniqid(), 'name' => 'No Value Now', 'market_value' => 5_000_000]);
+        $external = FantasyExternalTrend::create([
+            'fantasy_player_id' => $player->id,
+            'source' => 'futbolfantasy',
+            'match_confidence' => 'exact',
+            'value_1d' => 4_940_000,
+            'fetched_at' => now(),
+        ]);
+
+        $result = $this->presenter()->present($player, FantasyAccount::create(['user_id' => User::factory()->create()->id]), $external);
+
+        $this->assertNull($result->externalTrendPayload()['delta1d']);
+    }
+
     public function test_prefers_own_trend_and_omits_external_payload_when_there_is_none(): void
     {
         $player = FantasyPlayer::create(['external_id' => uniqid(), 'name' => 'No External Match', 'market_value' => 1_000_000]);

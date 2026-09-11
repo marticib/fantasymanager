@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import apiClient from '../api/client'
+import ChangeBadge from '../components/ChangeBadge'
 import Sparkline from '../components/Sparkline'
 import { TrendingUpIcon, WalletIcon, LinkIcon, ChevronDownIcon } from '../components/Icons'
-import { formatMoneyM, formatPercent, POSITION_LABELS, initials } from '../utils/format'
+import { formatMoneyM, formatPercent, formatDelta, formatFullDate, POSITION_LABELS, initials } from '../utils/format'
 
 const ACTION_BADGE = {
   SELL: 'bg-sell/15 text-sell',
@@ -64,6 +65,26 @@ function PlayerRow({ p }) {
           </span>
         </td>
         <td className="px-4 py-3 font-medium">{formatMoneyM(p.marketValue)}</td>
+        <td className="px-4 py-3">
+          {(() => {
+            const own = p.trend?.pctChange24h
+            const pct = own ?? p.externalTrend?.pct1d
+            if (pct == null) return <span className="text-text-muted">—</span>
+            const eurDelta = own != null ? p.trend?.change24h : p.externalTrend?.delta1d
+            return (
+              <div
+                className={pct > 0 ? 'text-buy' : pct < 0 ? 'text-sell' : 'text-text-muted'}
+                title={own == null ? 'Font externa (futbolfantasy.com, no oficial) — encara no tenim prou historial propi' : undefined}
+              >
+                <span>
+                  {pct >= 0 ? '↗' : '↘'} {formatPercent(pct)}
+                  {own == null && <span className="text-[9px] text-text-muted"> *ext.</span>}
+                </span>
+                {eurDelta != null && <p className="text-[10px] opacity-80">{formatDelta(eurDelta)}</p>}
+              </div>
+            )
+          })()}
+        </td>
         <td className="px-4 py-3">{p.clauseValue ? formatMoneyM(p.clauseValue) : '—'}</td>
         <td
           className="w-24 px-4 py-3"
@@ -124,7 +145,7 @@ function PlayerRow({ p }) {
       </tr>
       {open && d && (
         <tr className="border-b border-border bg-bg/40 last:border-0">
-          <td colSpan={9} className="px-4 py-4">
+          <td colSpan={10} className="px-4 py-4">
             <div className="grid gap-4 lg:grid-cols-[1fr_auto]">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
@@ -163,6 +184,7 @@ export default function Team() {
   const [team, setTeam] = useState(null)
   const [analysis, setAnalysis] = useState(null)
   const [error, setError] = useState('')
+  const [dailyHistory, setDailyHistory] = useState(null)
 
   useEffect(() => {
     apiClient
@@ -170,6 +192,10 @@ export default function Team() {
       .then((res) => setTeam(res.data))
       .catch((err) => setError(err.response?.data?.message || 'Error carregant la plantilla.'))
     apiClient.get('/team/analysis').then((res) => setAnalysis(res.data)).catch(() => {})
+    apiClient
+      .get('/history/team-value', { params: { range: '7d' } })
+      .then((res) => setDailyHistory(res.data.data))
+      .catch(() => {})
   }, [])
 
   if (error) return <p className="text-sell">{error}</p>
@@ -184,7 +210,19 @@ export default function Team() {
       <p className="mt-1 text-sm text-text-muted">{team.players.length} jugadors</p>
 
       <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        <StatTile icon={TrendingUpIcon} label="Valor plantilla" value={formatMoneyM(team.summary?.teamValue)} accent="buy" />
+        <StatTile
+          icon={TrendingUpIcon}
+          label="Valor plantilla"
+          value={formatMoneyM(team.summary?.teamValue)}
+          hint={
+            team.summary?.teamValueDelta24h != null ? (
+              <>
+                <ChangeBadge change={team.summary.teamValueDelta24h} changePct={team.summary.teamValueDelta24hPct} /> en 24h
+              </>
+            ) : null
+          }
+          accent="buy"
+        />
         <StatTile icon={WalletIcon} label="Saldo" value={formatMoneyM(team.summary?.cash)} hint="Disponible per operar" />
         <StatTile
           icon={LinkIcon}
@@ -235,6 +273,7 @@ export default function Team() {
               <th className="px-4 py-3">Jugador</th>
               <th className="px-4 py-3">Pos.</th>
               <th className="px-4 py-3">Valor</th>
+              <th className="px-4 py-3">24H</th>
               <th className="px-4 py-3">Clàusula</th>
               <th className="px-4 py-3">7D</th>
               <th className="px-4 py-3" title="Font externa (futbolfantasy.com, no oficial)">
@@ -254,6 +293,29 @@ export default function Team() {
           </tbody>
         </table>
       </div>
+
+      {dailyHistory && dailyHistory.length > 0 && (
+        <div className="mt-6 rounded-2xl border border-border bg-surface p-5">
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold">Històric diari</h2>
+            <Link to="/history" className="text-xs text-accent hover:underline">
+              Veure historial complet →
+            </Link>
+          </div>
+          <p className="mt-1 text-xs text-text-muted">Variació del valor de la plantilla (només jugadors) dia a dia.</p>
+          <div className="mt-3 divide-y divide-border">
+            {[...dailyHistory].reverse().map((row) => (
+              <div key={row.day} className="flex items-center justify-between gap-3 py-2.5 text-sm">
+                <span className="capitalize text-text-muted">{formatFullDate(new Date(row.day))}</span>
+                <div className="flex items-center gap-3">
+                  <span className="font-medium">{formatMoneyM(row.players_value)}</span>
+                  <ChangeBadge change={row.team_value_change} changePct={row.team_value_change_pct} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

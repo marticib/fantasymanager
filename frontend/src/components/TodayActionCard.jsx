@@ -33,11 +33,12 @@ const BG_CLASS = {
   hold: 'bg-hold/10 text-hold',
 }
 
-function Stat({ label, value, accent }) {
+function Stat({ label, value, accent, hint }) {
   return (
     <div className={accent ? `rounded-xl p-3 ${BG_CLASS[accent]}` : 'rounded-xl border border-border p-3'}>
       <p className="text-[11px] font-semibold uppercase tracking-wide opacity-80">{label}</p>
       <p className="mt-1 text-lg font-bold">{value}</p>
+      {hint && <p className="mt-0.5 text-[10px] opacity-70">{hint}</p>}
     </div>
   )
 }
@@ -92,7 +93,23 @@ export default function TodayActionCard({ action }) {
         {(action.type === 'RAISE_CLAUSE_NOW' || action.type === 'RAISE_CLAUSE_PLANNED') && (
           <div className="grid grid-cols-2 gap-2">
             {countdown && <Stat label="Temps restant" value={`Falten ${countdown}`} accent={color} />}
-            {action.amount != null && <Stat label="Cost" value={formatMoneyM(action.amount)} />}
+            {action.amount != null && <Stat label="Clàusula actual" value={formatMoneyM(action.amount)} />}
+            {action.metadata?.profitableTarget != null && (
+              <Stat
+                label="Rendible fins a"
+                value={formatMoneyM(action.metadata.profitableTarget)}
+                hint={action.metadata.profitableTargetCost > 0 ? `et costaria ${formatMoneyM(action.metadata.profitableTargetCost)}` : 'ja hi ets'}
+                accent="buy"
+              />
+            )}
+            {action.metadata?.antiTheftTarget != null && (
+              <Stat
+                label="Anti-robatori des de"
+                value={formatMoneyM(action.metadata.antiTheftTarget)}
+                hint={action.metadata.antiTheftTargetCost > 0 ? `et costaria ${formatMoneyM(action.metadata.antiTheftTargetCost)}` : 'ja hi ets'}
+                accent="clause"
+              />
+            )}
           </div>
         )}
 

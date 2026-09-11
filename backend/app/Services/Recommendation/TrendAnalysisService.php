@@ -37,7 +37,7 @@ class TrendAnalysisService
     public function analyzeSnapshots(Collection $snapshots): PlayerTrend
     {
         if ($snapshots->isEmpty()) {
-            return new PlayerTrend(null, null, null, null, null, null, null, PlayerTrend::ESTABLE, 0);
+            return new PlayerTrend(null, null, null, null, null, null, null, null, PlayerTrend::ESTABLE, 0);
         }
 
         $latest = $snapshots->last();
@@ -51,6 +51,10 @@ class TrendAnalysisService
         $change24h = $at24h ? $latest->market_value - $at24h->market_value : null;
         $change3d = $at3d ? $latest->market_value - $at3d->market_value : null;
         $change7d = $at7d ? $latest->market_value - $at7d->market_value : null;
+
+        $pctChange24h = ($at24h && $at24h->market_value > 0)
+            ? round((($latest->market_value - $at24h->market_value) / $at24h->market_value) * 100, 2)
+            : null;
 
         $pctChange3d = ($at3d && $at3d->market_value > 0)
             ? round((($latest->market_value - $at3d->market_value) / $at3d->market_value) * 100, 2)
@@ -69,6 +73,7 @@ class TrendAnalysisService
             change24h: $change24h,
             change3d: $change3d,
             change7d: $change7d,
+            pctChange24h: $pctChange24h,
             pctChange3d: $pctChange3d,
             pctChange7d: $pctChange7d,
             acceleration: $acceleration,

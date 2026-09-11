@@ -218,6 +218,12 @@ class TodayActionsService
                 'hoursRemaining' => $timing['hoursRemaining'],
                 'locked' => $locked,
                 'recommendedExecution' => $timing['recommendedExecution'],
+                // Two self-computed targets, not a LaLiga-confirmed cap — see
+                // PlayerDecisionEngine::clauseTiming()'s docblock.
+                'profitableTarget' => $timing['profitableTarget'] ?? null,
+                'profitableTargetCost' => $timing['profitableTargetCost'] ?? null,
+                'antiTheftTarget' => $timing['antiTheftTarget'] ?? null,
+                'antiTheftTargetCost' => $timing['antiTheftTargetCost'] ?? null,
             ],
         ];
     }
