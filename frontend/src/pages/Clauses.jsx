@@ -4,7 +4,7 @@ import apiClient from '../api/client'
 import ScoreRing from '../components/ScoreRing'
 import Sparkline from '../components/Sparkline'
 import { ShieldIcon, WalletIcon, ArrowRightIcon } from '../components/Icons'
-import { formatMoneyM, formatPercent, POSITION_LABELS, initials, ACTION_LABELS } from '../utils/format'
+import { formatMoneyM, formatDelta, formatPercent, POSITION_LABELS, initials, ACTION_LABELS } from '../utils/format'
 
 const POSITIONS = ['GK', 'DF', 'MF', 'FW']
 
@@ -46,6 +46,7 @@ const SORT_ACCESSORS = {
   player: (r) => r.playerName,
   position: (r) => r.position,
   owner: (r) => r.ownerTeamName || '',
+  change24h: (r) => r.trend?.change24h ?? r.externalTrend?.delta1d,
   marketValue: (r) => r.marketValue,
   pctChange7d: (r) => r.trend?.pctChange7d ?? r.externalTrend?.pct7d,
   clauseValue: (r) => r.clauseValue,
@@ -285,6 +286,13 @@ export default function Clauses() {
             <tr className="border-b border-border text-left text-xs uppercase text-text-muted">
               <th
                 className="cursor-pointer select-none px-4 py-3 hover:text-text"
+                onClick={() => toggleSort('change24h')}
+                title="Pujada o baixada de valor de mercat en les últimes 24 hores, en euros"
+              >
+                24H{sortArrow('change24h')}
+              </th>
+              <th
+                className="cursor-pointer select-none px-4 py-3 hover:text-text"
                 onClick={() => toggleSort('player')}
                 title="Jugador rival amb clàusula de rescissió activa"
               >
@@ -375,6 +383,22 @@ export default function Clauses() {
                 key={row.playerId + '-' + row.ownerTeamId}
                 className={`border-b border-border last:border-0 hover:bg-surface-hover ${row.economicRecommendation === 'PAY_CLAUSE' ? 'bg-clause/5' : ''}`}
               >
+                <td className="px-4 py-3">
+                  {(() => {
+                    const own = row.trend?.change24h
+                    const eurDelta = own ?? row.externalTrend?.delta1d
+                    if (eurDelta == null) return <span className="text-text-muted">—</span>
+                    return (
+                      <span
+                        className={eurDelta > 0 ? 'text-buy' : eurDelta < 0 ? 'text-sell' : 'text-text-muted'}
+                        title={own == null ? 'Font externa (futbolfantasy.com, no oficial) — encara no tenim prou historial propi' : undefined}
+                      >
+                        {eurDelta >= 0 ? '↗' : '↘'} {formatDelta(eurDelta)}
+                        {own == null && <span className="text-[9px] text-text-muted"> *ext.</span>}
+                      </span>
+                    )
+                  })()}
+                </td>
                 <td className="px-4 py-3">
                   <Link to={`/players/${row.playerId}`} className="flex items-center gap-2.5 hover:text-accent">
                     <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-hold/15 text-[10px] font-bold text-hold">
