@@ -93,6 +93,10 @@ return [
         'league_frequency_minutes' => (int) env('FANTASY_SYNC_LEAGUE_FREQUENCY', 60),
         'recommendations_frequency_minutes' => (int) env('FANTASY_RECOMMENDATIONS_FREQUENCY', 30),
         'clauses_frequency_minutes' => (int) env('FANTASY_SYNC_CLAUSES_FREQUENCY', 120),
+        // Tighter than clauses_frequency_minutes above on purpose: this one
+        // drives ClausePurchaseOrderService, where responsiveness is the
+        // whole point (racing other managers the moment a clause unlocks).
+        'clause_orders_frequency_minutes' => (int) env('FANTASY_SYNC_CLAUSE_ORDERS_FREQUENCY', 5),
         'decision_snapshots_frequency_minutes' => (int) env('FANTASY_SNAPSHOT_DECISIONS_FREQUENCY', 720),
         'decision_evaluation_frequency_minutes' => (int) env('FANTASY_EVALUATE_DECISIONS_FREQUENCY', 720),
     ],

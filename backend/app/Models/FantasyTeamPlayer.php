@@ -14,6 +14,7 @@ class FantasyTeamPlayer extends Model
     protected $fillable = [
         'fantasy_team_id',
         'fantasy_player_id',
+        'player_team_id',
         'clause_value',
         'clause_locked_until',
         'is_locked',

@@ -1,0 +1,85 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Models\FantasyAccount;
+use App\Models\FantasyClausePurchaseOrder;
+use App\Models\FantasyLeague;
+use App\Models\FantasyPlayer;
+use App\Models\FantasyTeam;
+use App\Models\FantasyTeamPlayer;
+use App\Models\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\TestCase;
+
+class ClausePurchaseOrderControllerTest extends TestCase
+{
+    use RefreshDatabase;
+
+    private function fixture(): array
+    {
+        $user = User::factory()->create();
+        $account = FantasyAccount::create(['user_id' => $user->id]);
+        $league = FantasyLeague::create(['fantasy_account_id' => $account->id, 'external_id' => 'L1', 'name' => 'Test League']);
+        $myTeam = FantasyTeam::create(['fantasy_league_id' => $league->id, 'external_id' => 'T1', 'name' => 'My Team', 'is_mine' => true]);
+        $rivalTeam = FantasyTeam::create(['fantasy_league_id' => $league->id, 'external_id' => 'T2', 'name' => 'Rival', 'is_mine' => false]);
+        $account->forceFill(['active_league_id' => $league->id, 'active_team_id' => $myTeam->id])->save();
+
+        $player = FantasyPlayer::create(['external_id' => uniqid(), 'name' => 'Clause Target']);
+        FantasyTeamPlayer::create([
+            'fantasy_team_id' => $rivalTeam->id,
+            'fantasy_player_id' => $player->id,
+            'player_team_id' => 'PT-1',
+            'clause_value' => 10_000_000,
+        ]);
+
+        return [$user, $player];
+    }
+
+    public function test_creates_lists_and_cancels_an_order(): void
+    {
+        [$user, $player] = $this->fixture();
+
+        $create = $this->actingAs($user, 'sanctum')->postJson('/api/clause-orders', ['fantasy_player_id' => $player->id]);
+        $create->assertCreated();
+        $create->assertJsonPath('status', 'PENDING');
+        $create->assertJsonPath('clauseValueAtOrder', 10_000_000);
+
+        $list = $this->actingAs($user, 'sanctum')->getJson('/api/clause-orders');
+        $list->assertOk();
+        $this->assertCount(1, $list->json('data'));
+
+        $orderId = $create->json('id');
+        $cancel = $this->actingAs($user, 'sanctum')->deleteJson("/api/clause-orders/{$orderId}");
+        $cancel->assertOk();
+        $this->assertSame(FantasyClausePurchaseOrder::STATUS_CANCELLED, FantasyClausePurchaseOrder::find($orderId)->status);
+    }
+
+    /** Spends real money if this ever breaks — must be airtight. */
+    public function test_another_accounts_order_can_never_be_confirmed_or_cancelled(): void
+    {
+        [$user, $player] = $this->fixture();
+        $order = $this->actingAs($user, 'sanctum')->postJson('/api/clause-orders', ['fantasy_player_id' => $player->id])->json();
+
+        $stranger = User::factory()->create();
+        FantasyAccount::create(['user_id' => $stranger->id]);
+
+        $this->actingAs($stranger, 'sanctum')->deleteJson("/api/clause-orders/{$order['id']}")->assertForbidden();
+        $this->actingAs($stranger, 'sanctum')->postJson("/api/clause-orders/{$order['id']}/confirm")->assertForbidden();
+
+        $this->assertSame(FantasyClausePurchaseOrder::STATUS_PENDING, FantasyClausePurchaseOrder::find($order['id'])->status);
+    }
+
+    public function test_rejects_creating_an_order_for_a_player_not_owned_by_a_rival(): void
+    {
+        $user = User::factory()->create();
+        $account = FantasyAccount::create(['user_id' => $user->id]);
+        $league = FantasyLeague::create(['fantasy_account_id' => $account->id, 'external_id' => 'L1', 'name' => 'Test League']);
+        $account->forceFill(['active_league_id' => $league->id])->save();
+        $freePlayer = FantasyPlayer::create(['external_id' => uniqid(), 'name' => 'Free Agent']);
+
+        $response = $this->actingAs($user, 'sanctum')->postJson('/api/clause-orders', ['fantasy_player_id' => $freePlayer->id]);
+
+        $response->assertStatus(422);
+    }
+}

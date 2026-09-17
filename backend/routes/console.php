@@ -49,6 +49,15 @@ Schedule::command('fantasy:sync-clauses')
     ->withoutOverlapping()
     ->onOneServer();
 
+// Deliberately its own, much tighter cadence than fantasy:sync-clauses
+// above — this is the only command that ever spends real in-game money
+// automatically (ClausePurchaseOrderService), so it always re-checks live
+// rather than trusting that slower snapshot.
+Schedule::command('fantasy:process-clause-orders')
+    ->cron(CronFrequency::everyMinutes((int) config('fantasy.sync.clause_orders_frequency_minutes')))
+    ->withoutOverlapping()
+    ->onOneServer();
+
 if (config('fantasy.external.enabled')) {
     Schedule::command('fantasy:sync-external-trends')
         ->cron(CronFrequency::everyMinutes((int) config('fantasy.external.sync_frequency_minutes')))

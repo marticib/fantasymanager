@@ -17,5 +17,10 @@ class FantasyRosterEntryDTO
         public readonly ?bool $isStarter,
         public readonly ?string $clauseLockedUntil = null,
         public readonly ?bool $isShielded = null,
+        // The roster-slot id ("this player currently on this team"), distinct
+        // from the player's own global id — confirmed live as a sibling field
+        // next to playerMaster. checkShield()'s player-team/{id} path expects
+        // this one, not the player's external id (that 403s).
+        public readonly ?string $playerTeamId = null,
     ) {}
 }

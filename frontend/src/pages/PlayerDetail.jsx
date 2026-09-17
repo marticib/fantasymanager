@@ -138,13 +138,34 @@ export default function PlayerDetail() {
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
   const [range, setRange] = useState('30D')
+  const [orderBusy, setOrderBusy] = useState(false)
+  const [orderError, setOrderError] = useState('')
 
-  useEffect(() => {
+  const loadPlayer = () => {
     apiClient
       .get(`/players/${id}`)
       .then((res) => setData(res.data))
       .catch((err) => setError(err.response?.data?.message || 'Error carregant el jugador.'))
-  }, [id])
+  }
+
+  useEffect(loadPlayer, [id])
+
+  const runOrderAction = async (action) => {
+    setOrderBusy(true)
+    setOrderError('')
+    try {
+      await action()
+      await loadPlayer()
+    } catch (err) {
+      setOrderError(err.response?.data?.message || 'Error processant l’ordre.')
+    } finally {
+      setOrderBusy(false)
+    }
+  }
+
+  const createClauseOrder = () => runOrderAction(() => apiClient.post('/clause-orders', { fantasy_player_id: data.player.id }))
+  const confirmClauseOrder = (orderId) => runOrderAction(() => apiClient.post(`/clause-orders/${orderId}/confirm`))
+  const cancelClauseOrder = (orderId) => runOrderAction(() => apiClient.delete(`/clause-orders/${orderId}`))
 
   const chartData = useMemo(() => {
     if (!data) return []
@@ -555,6 +576,83 @@ export default function PlayerDetail() {
             </div>
             {decision && (
               <span className={`mt-4 inline-flex rounded-lg px-3 py-2 text-sm font-semibold ${ACTION_BG_CLASS[color]}`}>{label}</span>
+            )}
+
+            {data.context === 'OWNED_BY_RIVAL' && data.clauseValue != null && (
+              <div className="mt-4 border-t border-border pt-4">
+                {!data.clausePurchaseOrder && (
+                  <button
+                    onClick={createClauseOrder}
+                    disabled={orderBusy}
+                    className="w-full rounded-lg bg-clause/15 px-3 py-2 text-sm font-semibold text-clause hover:bg-clause/25 disabled:opacity-50"
+                  >
+                    🤖 Programar compra automàtica (clàusula)
+                  </button>
+                )}
+
+                {data.clausePurchaseOrder?.status === 'PENDING' && (
+                  <div className="flex items-center justify-between gap-3 rounded-lg border border-clause/30 bg-clause/10 px-3 py-2">
+                    <p className="text-sm text-clause">🤖 Ordre activa — es comprarà en desbloquejar-se</p>
+                    <button
+                      onClick={() => cancelClauseOrder(data.clausePurchaseOrder.id)}
+                      disabled={orderBusy}
+                      className="shrink-0 text-xs font-semibold text-text-muted hover:text-sell disabled:opacity-50"
+                    >
+                      Cancel·lar
+                    </button>
+                  </div>
+                )}
+
+                {data.clausePurchaseOrder?.status === 'NEEDS_CONFIRMATION' && (
+                  <div className="rounded-lg border border-trading/30 bg-trading/10 px-3 py-3">
+                    <p className="text-sm font-semibold text-trading">
+                      La clàusula ha pujat a {formatMoneyM(data.clausePurchaseOrder.pendingConfirmationClauseValue)} (abans{' '}
+                      {formatMoneyM(data.clausePurchaseOrder.clauseValueAtOrder)})
+                    </p>
+                    <p className="mt-1 text-xs text-text-muted">Cal confirmar per comprar-la al preu nou.</p>
+                    <div className="mt-2 flex gap-2">
+                      <button
+                        onClick={() => confirmClauseOrder(data.clausePurchaseOrder.id)}
+                        disabled={orderBusy}
+                        className="rounded-lg bg-buy/20 px-3 py-1.5 text-xs font-semibold text-buy hover:bg-buy/30 disabled:opacity-50"
+                      >
+                        Confirmar compra
+                      </button>
+                      <button
+                        onClick={() => cancelClauseOrder(data.clausePurchaseOrder.id)}
+                        disabled={orderBusy}
+                        className="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-text-muted hover:text-sell disabled:opacity-50"
+                      >
+                        Cancel·lar
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {data.clausePurchaseOrder?.status === 'EXECUTED' && (
+                  <p className="rounded-lg border border-buy/30 bg-buy/10 px-3 py-2 text-sm font-semibold text-buy">
+                    ✅ Comprat automàticament per {formatMoneyM(data.clausePurchaseOrder.executedClauseValue)}
+                  </p>
+                )}
+
+                {data.clausePurchaseOrder?.status === 'FAILED' && (
+                  <div className="rounded-lg border border-sell/30 bg-sell/10 px-3 py-2">
+                    <p className="text-sm font-semibold text-sell">L’ordre ha fallat</p>
+                    {data.clausePurchaseOrder.errorMessage && (
+                      <p className="mt-1 text-xs text-text-muted">{data.clausePurchaseOrder.errorMessage}</p>
+                    )}
+                    <button
+                      onClick={createClauseOrder}
+                      disabled={orderBusy}
+                      className="mt-2 text-xs font-semibold text-clause hover:text-clause/80 disabled:opacity-50"
+                    >
+                      Torna-ho a provar
+                    </button>
+                  </div>
+                )}
+
+                {orderError && <p className="mt-2 text-xs text-sell">{orderError}</p>}
+              </div>
             )}
           </div>
 

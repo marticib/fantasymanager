@@ -77,6 +77,7 @@ class FantasyTeamServiceTest extends TestCase
 
         $this->assertTrue($byId['1']->isStarter);
         $this->assertSame(12_000_000, $byId['1']->player->clauseValue);
+        $this->assertSame('pt-1', $byId['1']->playerTeamId);
 
         $this->assertTrue($byId['2']->isStarter);
 
@@ -86,6 +87,38 @@ class FantasyTeamServiceTest extends TestCase
         // The top-level "team" metadata object must never be mistaken for a roster entry.
         $this->assertNull($byId->get('38060111'));
         $this->assertNull($byId->get('coach-1'));
+    }
+
+    /**
+     * playerTeamId is a roster-slot id distinct from the player's own
+     * external id — confirmed live (see ClausePurchaseOrderService), needed
+     * for checkShield()/payClause(), which 403/would-fail on the player's
+     * own id instead.
+     */
+    public function test_extracts_player_team_id_and_clause_lock_state_from_the_league_scoped_shape(): void
+    {
+        Http::fake([
+            'fantasy-api.llt-services.com/*' => Http::response([
+                'players' => [
+                    [
+                        'playerMaster' => ['id' => '3177', 'name' => 'Rival Player', 'positionId' => 2, 'marketValue' => 2_500_000, 'points' => 10, 'averagePoints' => 1.0, 'playerStatus' => 'ok'],
+                        'buyoutClause' => 4_000_000,
+                        'playerTeamId' => '37653758',
+                        'buyoutClauseLockedEndTime' => '2026-09-25T12:40:09+02:00',
+                        'isShielded' => false,
+                    ],
+                ],
+            ], 200),
+        ]);
+
+        $entries = (new FantasyTeamService(app(FantasyApiClient::class)))
+            ->getLeagueTeamRoster($this->account(), 'L1', 'T2');
+
+        $this->assertCount(1, $entries);
+        $this->assertSame('37653758', $entries[0]->playerTeamId);
+        $this->assertSame('2026-09-25T12:40:09+02:00', $entries[0]->clauseLockedUntil);
+        $this->assertFalse($entries[0]->isShielded);
+        $this->assertSame(4_000_000, $entries[0]->player->clauseValue);
     }
 
     public function test_missing_formation_returns_an_empty_roster_instead_of_crashing(): void

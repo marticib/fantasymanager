@@ -254,6 +254,7 @@ class FantasySyncService
                     $starterExternalIds->has($entry->player->externalId),
                     $entry->clauseLockedUntil,
                     $entry->isShielded,
+                    $entry->playerTeamId,
                 ),
                 $fullRoster,
             );
@@ -275,6 +276,7 @@ class FantasySyncService
             FantasyTeamPlayer::updateOrCreate(
                 ['fantasy_team_id' => $team->id, 'fantasy_player_id' => $player->id],
                 [
+                    'player_team_id' => $entry->playerTeamId,
                     'clause_value' => $dto->clauseValue,
                     'is_starter' => $entry->isStarter,
                     'clause_locked_until' => $entry->clauseLockedUntil,

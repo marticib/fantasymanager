@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\FantasyPlayerResource;
 use App\Models\FantasyAccount;
+use App\Models\FantasyClausePurchaseOrder;
 use App\Models\FantasyExternalTrend;
 use App\Models\FantasyLeague;
 use App\Models\FantasyMarketPlayer;
@@ -154,6 +155,19 @@ class PlayerController extends Controller
 
         $context = $this->ownershipContext($owner, $listing);
 
+        $clausePurchaseOrder = $context === 'OWNED_BY_RIVAL'
+            ? FantasyClausePurchaseOrder::where('fantasy_account_id', $account->id)
+                ->where('fantasy_player_id', $player->id)
+                ->whereIn('status', [
+                    FantasyClausePurchaseOrder::STATUS_PENDING,
+                    FantasyClausePurchaseOrder::STATUS_NEEDS_CONFIRMATION,
+                    FantasyClausePurchaseOrder::STATUS_EXECUTED,
+                    FantasyClausePurchaseOrder::STATUS_FAILED,
+                ])
+                ->latest()
+                ->first()
+            : null;
+
         $decision = match ($context) {
             'OWNED_BY_ME' => $this->rosterDecision($account, $player, $decisionEngine),
             'ON_MARKET' => $this->buyDecision($player, $listing, $league, $trendCalculator, $premiumEstimator, $buyAnalysisService, $externalTrend),
@@ -226,6 +240,14 @@ class PlayerController extends Controller
             'clauseLockedUntil' => $lockedUntil?->toIso8601String(),
             'isClauseLocked' => $lockedUntil !== null && $lockedUntil->isFuture(),
             'listing' => $listing ? ['expiresAt' => $listing->expires_at?->toIso8601String(), 'askingPrice' => $listing->asking_price] : null,
+            'clausePurchaseOrder' => $clausePurchaseOrder ? [
+                'id' => $clausePurchaseOrder->id,
+                'status' => $clausePurchaseOrder->status,
+                'clauseValueAtOrder' => $clausePurchaseOrder->clause_value_at_order,
+                'pendingConfirmationClauseValue' => $clausePurchaseOrder->pending_confirmation_clause_value,
+                'executedClauseValue' => $clausePurchaseOrder->executed_clause_value,
+                'errorMessage' => $clausePurchaseOrder->error_message,
+            ] : null,
             // The decision the relevant engine reached, plus the deterministic
             // favors/risks bullets and the full raw analysis (for "Veure càlcul").
             'decision' => $decision,

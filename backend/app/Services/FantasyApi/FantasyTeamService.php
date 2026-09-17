@@ -68,7 +68,11 @@ class FantasyTeamService
                 $playerData['buyoutClause'] = $slot['buyoutClause'];
             }
 
-            $entries[] = new FantasyRosterEntryDTO(FantasyPlayerDTO::fromArray($playerData), $isStarter);
+            $entries[] = new FantasyRosterEntryDTO(
+                FantasyPlayerDTO::fromArray($playerData),
+                $isStarter,
+                playerTeamId: $slot['playerTeamId'] ?? null,
+            );
         }
 
         return $entries;
@@ -108,6 +112,7 @@ class FantasyTeamService
                 null,
                 clauseLockedUntil: $slot['buyoutClauseLockedEndTime'] ?? null,
                 isShielded: $slot['isShielded'] ?? null,
+                playerTeamId: $slot['playerTeamId'] ?? null,
             );
         }
 

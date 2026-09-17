@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ClauseController;
+use App\Http\Controllers\Api\ClausePurchaseOrderController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\FantasyAccountController;
 use App\Http\Controllers\Api\HistoryController;
@@ -58,6 +59,11 @@ Route::middleware('auth:sanctum')->group(function () {
     // Trading & clauses (scaffolded now, fleshed out post-MVP)
     Route::get('/trading/opportunities', [TradingController::class, 'opportunities']);
     Route::get('/clauses/opportunities', [ClauseController::class, 'opportunities']);
+
+    Route::get('/clause-orders', [ClausePurchaseOrderController::class, 'index']);
+    Route::post('/clause-orders', [ClausePurchaseOrderController::class, 'store']);
+    Route::post('/clause-orders/{order}/confirm', [ClausePurchaseOrderController::class, 'confirm']);
+    Route::delete('/clause-orders/{order}', [ClausePurchaseOrderController::class, 'destroy']);
 
     // Standings
     Route::get('/standings', [StandingController::class, 'index']);

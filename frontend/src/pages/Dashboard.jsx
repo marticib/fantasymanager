@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import apiClient from '../api/client'
 import TodayActionCard from '../components/TodayActionCard'
 import { WarningIcon, RefreshIcon, CheckIcon } from '../components/Icons'
-import { formatFullDate, greeting, initials } from '../utils/format'
+import { formatFullDate, formatMoneyM, greeting, initials } from '../utils/format'
 
 const STALE_AFTER_MINUTES = 90
 
@@ -51,12 +51,18 @@ export default function Dashboard() {
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
   const [syncing, setSyncing] = useState(false)
+  const [ordersNeedingConfirmation, setOrdersNeedingConfirmation] = useState([])
 
   const load = () => {
     apiClient
       .get('/dashboard/today')
       .then((res) => setData(res.data))
       .catch((err) => setError(err.response?.data?.message || 'Error carregant el dashboard.'))
+
+    apiClient
+      .get('/clause-orders', { params: { status: 'NEEDS_CONFIRMATION' } })
+      .then((res) => setOrdersNeedingConfirmation(res.data.data))
+      .catch(() => {})
   }
 
   useEffect(load, [])
@@ -101,6 +107,32 @@ export default function Dashboard() {
         {data.currentMatchday ? ` · Jornada ${data.currentMatchday}` : ''}
         {today && !today.nothingToDoToday ? ` · ${today.summary}` : ''}
       </p>
+
+      {ordersNeedingConfirmation.length > 0 && (
+        <div className="mt-5 rounded-xl border border-clause/30 bg-clause/10 px-5 py-4">
+          <div className="flex items-start gap-3">
+            <WarningIcon className="mt-0.5 h-5 w-5 shrink-0 text-clause" />
+            <p className="text-sm font-semibold text-clause">
+              {ordersNeedingConfirmation.length === 1
+                ? '1 ordre de compra automàtica espera confirmació'
+                : `${ordersNeedingConfirmation.length} ordres de compra automàtica esperen confirmació`}{' '}
+              — la clàusula ha pujat des que es va programar.
+            </p>
+          </div>
+          <div className="mt-3 space-y-1.5">
+            {ordersNeedingConfirmation.map((order) => (
+              <Link
+                key={order.id}
+                to={`/players/${order.player.id}`}
+                className="flex items-center justify-between rounded-lg bg-surface px-3 py-2 text-sm hover:bg-surface-hover"
+              >
+                <span className="font-semibold">{order.player.name}</span>
+                <span className="text-text-muted">{formatMoneyM(order.pendingConfirmationClauseValue)}</span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       {isStale && (
         <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-trading/30 bg-trading/10 px-5 py-4">
