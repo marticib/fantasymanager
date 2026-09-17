@@ -69,23 +69,23 @@ export default function Settings() {
     }
   }
 
-  if (!rules || !weights) return <p className="text-text-muted">Carregant…</p>
+  if (!rules || !weights) return <p className="text-muted-foreground">Carregant…</p>
 
   return (
     <div>
       <h1 className="text-2xl font-bold tracking-tight">Configuració</h1>
-      <p className="mt-1 text-sm text-text-muted">Ajusta els llindars i pesos del motor de recomanacions.</p>
+      <p className="mt-1 text-sm text-muted-foreground">Ajusta els llindars i pesos del motor de recomanacions.</p>
 
       <section className="mt-6 rounded-2xl border border-border bg-surface p-6">
         <h2 className="font-semibold">Compte de LaLiga Fantasy</h2>
         {account?.hasTokens ? (
-          <p className="mt-1 text-sm text-text-muted">
+          <p className="mt-1 text-sm text-muted-foreground">
             Connectat{account.nickname ? ` com a ${account.nickname}` : ''}.
           </p>
         ) : (
-          <p className="mt-1 text-sm text-text-muted">No hi ha cap sessió de LaLiga Fantasy connectada.</p>
+          <p className="mt-1 text-sm text-muted-foreground">No hi ha cap sessió de LaLiga Fantasy connectada.</p>
         )}
-        <p className="mt-3 text-xs text-text-muted">
+        <p className="mt-3 text-xs text-muted-foreground">
           Desconnectar només esborra la sessió de LaLiga (els tokens) — la resta de dades ja sincronitzades
           (jugadors, mercat, historial) no es toquen. Després caldrà tornar a connectar el compte des de
           l'onboarding.
@@ -94,24 +94,24 @@ export default function Settings() {
         {!confirmDisconnect ? (
           <button
             onClick={() => setConfirmDisconnect(true)}
-            className="mt-4 rounded-lg border border-sell/40 px-4 py-2 text-sm font-semibold text-sell hover:bg-sell/10"
+            className="mt-4 rounded-lg border border-bear/40 px-4 py-2 text-sm font-semibold text-bear hover:bg-bear/10"
           >
             Desconnectar LaLiga Fantasy
           </button>
         ) : (
           <div className="mt-4 flex items-center gap-2">
-            <span className="text-sm text-text-muted">Segur?</span>
+            <span className="text-sm text-muted-foreground">Segur?</span>
             <button
               onClick={disconnect}
               disabled={disconnecting}
-              className="rounded-lg bg-sell px-4 py-2 text-sm font-semibold text-bg hover:opacity-90 disabled:opacity-50"
+              className="rounded-lg bg-bear px-4 py-2 text-sm font-semibold text-bg hover:opacity-90 disabled:opacity-50"
             >
               {disconnecting ? 'Desconnectant…' : 'Sí, desconnectar'}
             </button>
             <button
               onClick={() => setConfirmDisconnect(false)}
               disabled={disconnecting}
-              className="rounded-lg border border-border px-4 py-2 text-sm text-text-muted hover:text-text disabled:opacity-50"
+              className="rounded-lg border border-border px-4 py-2 text-sm text-muted-foreground hover:text-foreground disabled:opacity-50"
             >
               Cancel·lar
             </button>
@@ -125,12 +125,12 @@ export default function Settings() {
           <div className="mt-4 space-y-3">
             {Object.entries(rules).map(([key, value]) => (
               <div key={key} className="flex items-center justify-between gap-4">
-                <label className="text-sm text-text-muted">{RULE_LABELS[key] || key}</label>
+                <label className="text-sm text-muted-foreground">{RULE_LABELS[key] || key}</label>
                 <input
                   type="number"
                   value={value}
                   onChange={(e) => setRules((r) => ({ ...r, [key]: Number(e.target.value) }))}
-                  className="w-32 rounded-lg border border-border bg-bg px-2 py-1 text-right text-sm outline-none focus:border-accent"
+                  className="w-32 rounded-lg border border-border bg-background px-2 py-1 text-right text-sm outline-none focus:border-primary"
                 />
               </div>
             ))}
@@ -139,16 +139,16 @@ export default function Settings() {
 
         <section className="rounded-2xl border border-border bg-surface p-6">
           <h2 className="font-semibold">Pesos del Fantasy Score</h2>
-          <p className="mt-1 text-xs text-text-muted">Es normalitzen automàticament a 100.</p>
+          <p className="mt-1 text-xs text-muted-foreground">Es normalitzen automàticament a 100.</p>
           <div className="mt-4 space-y-3">
             {Object.entries(weights).map(([key, value]) => (
               <div key={key} className="flex items-center justify-between gap-4">
-                <label className="text-sm text-text-muted">{WEIGHT_LABELS[key] || key}</label>
+                <label className="text-sm text-muted-foreground">{WEIGHT_LABELS[key] || key}</label>
                 <input
                   type="number"
                   value={Math.round(value)}
                   onChange={(e) => setWeights((w) => ({ ...w, [key]: Number(e.target.value) }))}
-                  className="w-32 rounded-lg border border-border bg-bg px-2 py-1 text-right text-sm outline-none focus:border-accent"
+                  className="w-32 rounded-lg border border-border bg-background px-2 py-1 text-right text-sm outline-none focus:border-primary"
                 />
               </div>
             ))}
@@ -159,11 +159,11 @@ export default function Settings() {
       <button
         onClick={save}
         disabled={saving}
-        className="mt-6 rounded-lg bg-accent px-5 py-2 text-sm font-semibold text-bg hover:opacity-90 disabled:opacity-50"
+        className="mt-6 rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-bg hover:opacity-90 disabled:opacity-50"
       >
         {saving ? 'Desant…' : 'Desar configuració'}
       </button>
-      {message && <p className="mt-2 text-sm text-text-muted">{message}</p>}
+      {message && <p className="mt-2 text-sm text-muted-foreground">{message}</p>}
     </div>
   )
 }

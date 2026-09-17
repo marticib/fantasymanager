@@ -13,24 +13,24 @@ const TYPE_META = {
 }
 
 const BORDER_CLASS = {
-  clause: 'border-clause/30',
-  buy: 'border-buy/30',
-  sell: 'border-sell/30',
+  clause: 'border-info/30',
+  buy: 'border-bull/30',
+  sell: 'border-bear/30',
   hold: 'border-border',
 }
 
 const TEXT_CLASS = {
-  clause: 'text-clause',
-  buy: 'text-buy',
-  sell: 'text-sell',
-  hold: 'text-text-muted',
+  clause: 'text-info',
+  buy: 'text-bull',
+  sell: 'text-bear',
+  hold: 'text-muted-foreground',
 }
 
 const BG_CLASS = {
-  clause: 'bg-clause/10 text-clause',
-  buy: 'bg-buy/10 text-buy',
-  sell: 'bg-sell/10 text-sell',
-  hold: 'bg-hold/10 text-hold',
+  clause: 'bg-info/10 text-info',
+  buy: 'bg-bull/10 text-bull',
+  sell: 'bg-bear/10 text-bear',
+  hold: 'bg-muted-foreground/10 text-muted-foreground',
 }
 
 function Stat({ label, value, accent, hint }) {
@@ -57,7 +57,7 @@ export default function TodayActionCard({ action }) {
           <span className={`h-1.5 w-1.5 rounded-full bg-current`} />
           {action.category === 'urgent' ? 'Prioritat màxima' : 'Oportunitat'}
         </span>
-        <span className="flex items-center gap-1.5 text-xs text-text-muted">
+        <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <SignalIcon className="h-3.5 w-3.5" />
           {action.confidence}% confiança
         </span>
@@ -76,18 +76,18 @@ export default function TodayActionCard({ action }) {
           </div>
           <div className="min-w-0 flex-1">
             <p className="truncate font-semibold">{player.name}</p>
-            <p className="truncate text-xs text-text-muted">{player.club || 'Club desconegut'}</p>
+            <p className="truncate text-xs text-muted-foreground">{player.club || 'Club desconegut'}</p>
           </div>
           {action.mainScore != null && (
             <div className="shrink-0 text-right">
               <p className="text-lg font-bold">{Math.round(action.mainScore)}</p>
-              <p className="text-[10px] uppercase tracking-wide text-text-muted">Score</p>
+              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Score</p>
             </div>
           )}
         </div>
       )}
 
-      <p className="mt-4 text-sm text-text-muted">{action.shortExplanation}</p>
+      <p className="mt-4 text-sm text-muted-foreground">{action.shortExplanation}</p>
 
       <div className="mt-4 flex-1">
         {(action.type === 'RAISE_CLAUSE_NOW' || action.type === 'RAISE_CLAUSE_PLANNED') && (
@@ -99,7 +99,7 @@ export default function TodayActionCard({ action }) {
                 label="Rendible fins a"
                 value={formatMoneyM(action.metadata.profitableTarget)}
                 hint={action.metadata.profitableTargetCost > 0 ? `et costaria ${formatMoneyM(action.metadata.profitableTargetCost)}` : 'ja hi ets'}
-                accent="buy"
+                accent="bull"
               />
             )}
             {action.metadata?.antiTheftTarget != null && (
@@ -107,7 +107,7 @@ export default function TodayActionCard({ action }) {
                 label="Anti-robatori des de"
                 value={formatMoneyM(action.metadata.antiTheftTarget)}
                 hint={action.metadata.antiTheftTargetCost > 0 ? `et costaria ${formatMoneyM(action.metadata.antiTheftTargetCost)}` : 'ja hi ets'}
-                accent="clause"
+                accent="info"
               />
             )}
           </div>
@@ -127,7 +127,7 @@ export default function TodayActionCard({ action }) {
         {action.type === 'BUY' && (
           <div className="grid grid-cols-2 gap-2">
             <Stat label="Valor" value={formatMoneyM(action.currentValue)} />
-            <Stat label="Oferta recomanada" value={formatMoneyM(action.recommendedBid)} accent="buy" />
+            <Stat label="Oferta recomanada" value={formatMoneyM(action.recommendedBid)} accent="bull" />
             <Stat label="Màxim" value={formatMoneyM(action.maxBid)} />
             {action.metadata?.expectedROI14d != null && (
               <Stat label="ROI 14d" value={formatPercent(action.metadata.expectedROI14d * 100)} />
@@ -139,14 +139,14 @@ export default function TodayActionCard({ action }) {
           <div className="grid grid-cols-2 gap-2">
             <Stat label="Màxim" value={formatMoneyM(action.maxBid)} />
             {action.metadata?.estimatedWinningBid != null && (
-              <Stat label="Oferta estimada" value={formatMoneyM(action.metadata.estimatedWinningBid)} accent="sell" />
+              <Stat label="Oferta estimada" value={formatMoneyM(action.metadata.estimatedWinningBid)} accent="bear" />
             )}
           </div>
         )}
 
         {action.type === 'PAY_CLAUSE' && (
           <div className="grid grid-cols-2 gap-2">
-            <Stat label="Clàusula" value={formatMoneyM(action.amount)} accent="clause" />
+            <Stat label="Clàusula" value={formatMoneyM(action.amount)} accent="info" />
             <Stat label="Valor" value={formatMoneyM(action.currentValue)} />
             {action.metadata?.ownerTeamName && <Stat label="Propietari" value={action.metadata.ownerTeamName} />}
             {action.metadata?.roi14d != null && <Stat label="ROI 14d" value={formatPercent(action.metadata.roi14d * 100)} />}

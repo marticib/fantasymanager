@@ -9,38 +9,35 @@ export default function Standings() {
     apiClient.get('/standings').then((res) => setData(res.data))
   }, [])
 
-  if (!data) return <p className="text-text-muted">Carregant…</p>
+  if (!data) return <p className="text-muted-foreground">Carregant…</p>
 
   return (
     <div>
-      <h1 className="text-2xl font-bold tracking-tight">Classificació</h1>
-      {data.message && <p className="mt-2 text-sm text-text-muted">{data.message}</p>}
-      <div className="mt-4 overflow-hidden rounded-2xl border border-border bg-surface">
+      <h1 className="text-3xl font-semibold tracking-tight">Classificació</h1>
+      {data.message && <p className="mt-2 text-sm text-muted-foreground">{data.message}</p>}
+      <div className="panel mt-4 overflow-hidden">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-border text-left text-xs uppercase text-text-muted">
+            <tr className="border-b border-border text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
               <th className="px-4 py-3">#</th>
               <th className="px-4 py-3">Equip</th>
               <th className="px-4 py-3">Punts</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-border">
             {data.data.map((row) => (
-              <tr
-                key={row.position}
-                className={`border-b border-border last:border-0 ${row.isMine ? 'bg-accent/10' : ''}`}
-              >
-                <td className="px-4 py-3">{row.position}</td>
-                <td className="px-4 py-3 font-medium">
+              <tr key={row.position} className={row.isMine ? 'bg-primary/10' : ''}>
+                <td className="num px-4 py-2.5 text-muted-foreground">{row.position}</td>
+                <td className="px-4 py-2.5 font-medium">
                   {row.teamId ? (
-                    <Link to={row.isMine ? '/team' : `/standings/${row.teamId}`} className="hover:text-accent hover:underline">
+                    <Link to={row.isMine ? '/team' : `/standings/${row.teamId}`} className="hover:text-primary hover:underline">
                       {row.team}
                     </Link>
                   ) : (
                     row.team
                   )}
                 </td>
-                <td className="px-4 py-3">{row.points}</td>
+                <td className="num px-4 py-2.5">{row.points}</td>
               </tr>
             ))}
           </tbody>

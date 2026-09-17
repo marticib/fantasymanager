@@ -2,7 +2,7 @@ import { LineChart, Line, ResponsiveContainer } from 'recharts'
 
 export default function Sparkline({ data, positive, height = 32 }) {
   if (!data || data.length < 2) {
-    return <div className="text-xs text-text-muted">—</div>
+    return <div className="text-xs text-muted-foreground">—</div>
   }
 
   // Color always comes from the line's own first/last value by default —
@@ -11,7 +11,7 @@ export default function Sparkline({ data, positive, height = 32 }) {
   // while the line itself fell back to an external source) and silently
   // drift out of sync with it. Pass `positive` explicitly only to override.
   const isPositive = positive ?? data[data.length - 1].value >= data[0].value
-  const color = isPositive ? 'var(--color-buy)' : 'var(--color-sell)'
+  const color = isPositive ? 'var(--color-bull)' : 'var(--color-bear)'
 
   return (
     <div style={{ width: '100%', height }}>

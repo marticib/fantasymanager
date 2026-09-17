@@ -1,18 +1,94 @@
 @import "tailwindcss";
 
-@theme {
-  --color-bg: #0b0f14;
-  --color-surface: #121821;
-  --color-surface-hover: #182130;
-  --color-border: #223044;
-  --color-text: #e7edf5;
-  --color-text-muted: #8ea0b8;
-  --color-accent: #3ea6ff;
-  --color-buy: #22c55e;
-  --color-sell: #ef4444;
-  --color-hold: #94a3b8;
-  --color-clause: #a855f7;
-  --color-trading: #f59e0b;
+:root {
+  --background: oklch(0.16 0.006 260);
+  --foreground: oklch(0.98 0.002 260);
+  --surface: oklch(0.204 0.007 260);
+  --surface-raised: oklch(0.238 0.008 260);
+  --muted-foreground: oklch(0.66 0.012 260);
+  --border: oklch(1 0 0 / 8%);
+  --border-strong: oklch(1 0 0 / 14%);
+  --primary: oklch(0.72 0.145 156);
+  --bull: oklch(0.74 0.14 158);
+  --bull-soft: oklch(0.74 0.14 158 / 14%);
+  --bear: oklch(0.65 0.16 22);
+  --bear-soft: oklch(0.65 0.16 22 / 14%);
+  --warn: oklch(0.77 0.14 68);
+  --warn-soft: oklch(0.77 0.14 68 / 14%);
+  --info: oklch(0.68 0.13 275);
+  --info-soft: oklch(0.68 0.13 275 / 14%);
+  --radius: 0.75rem;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-primary: var(--primary);
+  --color-bull: var(--bull);
+  --color-bull-soft: var(--bull-soft);
+  --color-bear: var(--bear);
+  --color-bear-soft: var(--bear-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.333);
+
+  --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-heading: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  /*
+   * Design-system rollout is staged page by page (see README) — Team.jsx
+   * and Layout.jsx are migrated to the tokens above directly, but the rest
+   * of the app still uses these older names. Aliasing them here means every
+   * page already renders with the new exact colors today, with zero risk
+   * of touching pages blind; only the class *names* (text-buy, bg-clause...)
+   * stay old until each page gets its own migration pass. Retire these once
+   * every page has moved onto the tokens above.
+   */
+  --color-bg: var(--background);
+  --color-text: var(--foreground);
+  --color-text-muted: var(--muted-foreground);
+  --color-surface-hover: var(--surface-raised);
+  --color-accent: var(--primary);
+  --color-buy: var(--bull);
+  --color-sell: var(--bear);
+  --color-hold: var(--muted-foreground);
+  --color-clause: var(--info);
+  --color-trading: var(--warn);
+}
+
+@utility num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+}
+
+@utility panel {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+}
+
+@utility elevated {
+  box-shadow:
+    0 1px 0 0 oklch(1 0 0 / 4%) inset,
+    0 12px 32px -18px oklch(0 0 0 / 80%);
+}
+
+@utility grid-fade {
+  background-image:
+    linear-gradient(oklch(1 0 0 / 3%) 1px, transparent 1px),
+    linear-gradient(90deg, oklch(1 0 0 / 3%) 1px, transparent 1px);
+  background-size: 44px 44px;
 }
 
 html {
@@ -20,6 +96,20 @@ html {
 }
 
 body {
-  background-color: var(--color-bg);
-  color: var(--color-text);
+  font-family: var(--font-sans);
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-heading);
+  letter-spacing: -0.02em;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-strong) transparent;
 }

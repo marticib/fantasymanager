@@ -1,8 +1,8 @@
 function tier(score) {
-  if (score >= 80) return { label: 'MOLT BO', color: 'var(--color-buy)' }
-  if (score >= 65) return { label: 'BO', color: 'var(--color-accent)' }
-  if (score >= 50) return { label: 'MITJÀ', color: 'var(--color-trading)' }
-  return { label: 'BAIX', color: 'var(--color-sell)' }
+  if (score >= 80) return { label: 'MOLT BO', color: 'var(--color-bull)' }
+  if (score >= 65) return { label: 'BO', color: 'var(--color-primary)' }
+  if (score >= 50) return { label: 'MITJÀ', color: 'var(--color-warn)' }
+  return { label: 'BAIX', color: 'var(--color-bear)' }
 }
 
 export default function ScoreRing({ score, size = 88, title = 'Fantasy Score', tierLabel, tierColor }) {
@@ -42,7 +42,7 @@ export default function ScoreRing({ score, size = 88, title = 'Fantasy Score', t
         </text>
       </svg>
       <div>
-        <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">{title}</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</p>
         <p className="text-sm font-bold" style={{ color }}>
           {label}
         </p>

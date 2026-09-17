@@ -135,24 +135,24 @@ export default function Onboarding() {
   return (
     <div className="mx-auto min-h-screen max-w-2xl px-4 py-10">
       <h1 className="text-2xl font-bold">Configuració inicial</h1>
-      <p className="mt-1 text-sm text-text-muted">
+      <p className="mt-1 text-sm text-muted-foreground">
         Tres passos: connecta la teva sessió de LALIGA Fantasy, tria la lliga i sincronitza.
       </p>
 
       <section className="mt-8 rounded-2xl border border-border bg-surface p-6">
         <h2 className="font-semibold">1. Sessió de LALIGA Fantasy</h2>
-        <p className="mt-1 text-sm text-text-muted">
-          Enganxa el <code className="rounded bg-bg px-1">access_token</code> (i si el tens, el{' '}
-          <code className="rounded bg-bg px-1">refresh_token</code>) d'una sessió ja iniciada. Mai et demanem la teva
+        <p className="mt-1 text-sm text-muted-foreground">
+          Enganxa el <code className="rounded bg-background px-1">access_token</code> (i si el tens, el{' '}
+          <code className="rounded bg-background px-1">refresh_token</code>) d'una sessió ja iniciada. Mai et demanem la teva
           contrasenya de LALIGA — no la guardem ni la veiem.
         </p>
         {account?.hasTokens ? (
-          <p className="mt-3 text-sm text-buy">✓ Sessió configurada{account.nickname ? ` (${account.nickname})` : ''}.</p>
+          <p className="mt-3 text-sm text-bull">✓ Sessió configurada{account.nickname ? ` (${account.nickname})` : ''}.</p>
         ) : (
           <>
-            <div className="mt-4 rounded-xl border border-accent/30 bg-accent/5 p-4">
+            <div className="mt-4 rounded-xl border border-primary/30 bg-primary/5 p-4">
               <p className="text-sm font-semibold">Recomanat: inicia sessió amb LaLiga</p>
-              <p className="mt-1 text-xs text-text-muted">
+              <p className="mt-1 text-xs text-muted-foreground">
                 És el login real de LaLiga (funciona amb Google/Apple, sense contrasenya pròpia). Com que Azure B2C
                 de LaLiga només accepta tornar a la seva pròpia app, no pot ser un sol clic — cal un pas manual per
                 copiar el codi, però la resta ho fem nosaltres i la sessió dura fins a 90 dies.
@@ -162,20 +162,20 @@ export default function Onboarding() {
                 <button
                   onClick={startOAuth}
                   disabled={oauthStarting}
-                  className="mt-3 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-bg hover:opacity-90 disabled:opacity-50"
+                  className="mt-3 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-bg hover:opacity-90 disabled:opacity-50"
                 >
                   {oauthStarting ? 'Generant…' : '1. Obrir login de LaLiga'}
                 </button>
               ) : (
                 <div className="mt-3 space-y-3">
-                  <p className="text-xs text-text-muted">
+                  <p className="text-xs text-muted-foreground">
                     S'ha obert una pestanya nova — inicia sessió amb LaLiga (Google, Apple o email). Quan acabi, el
                     navegador intentarà obrir <span className="font-mono">authredirect://…</span> i fallarà —{' '}
                     <strong>això és normal</strong>. Amb les DevTools obertes (pestanya Network, "Preserve log"
                     activat), busca la petició a <span className="font-mono">authredirect://com.lfp.laligafantasy…</span>{' '}
                     (apareix com a cancel·lada) i copia'n la URL completa.
                   </p>
-                  <a href={oauthUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-accent hover:underline">
+                  <a href={oauthUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">
                     Tornar a obrir l'enllaç de login
                   </a>
                   <form onSubmit={finishOAuth} className="space-y-2">
@@ -185,36 +185,36 @@ export default function Onboarding() {
                       value={pastedRedirect}
                       onChange={(e) => setPastedRedirect(e.target.value)}
                       rows={2}
-                      className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-xs font-mono outline-none focus:border-accent"
+                      className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs font-mono outline-none focus:border-primary"
                     />
-                    {oauthFinishError && <p className="text-sm text-sell">{oauthFinishError}</p>}
+                    {oauthFinishError && <p className="text-sm text-bear">{oauthFinishError}</p>}
                     <button
                       type="submit"
                       disabled={oauthFinishing}
-                      className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-bg hover:opacity-90 disabled:opacity-50"
+                      className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-bg hover:opacity-90 disabled:opacity-50"
                     >
                       {oauthFinishing ? 'Connectant…' : '2. Connectar'}
                     </button>
                   </form>
                 </div>
               )}
-              {oauthStartError && <p className="mt-2 text-sm text-sell">{oauthStartError}</p>}
+              {oauthStartError && <p className="mt-2 text-sm text-bear">{oauthStartError}</p>}
             </div>
 
             <details className="mt-4 rounded-xl border border-border p-4">
-              <summary className="cursor-pointer text-sm font-semibold text-text-muted">
+              <summary className="cursor-pointer text-sm font-semibold text-muted-foreground">
                 Alternativa: bookmarklet (si ja tens sessió oberta a LaLiga)
               </summary>
-              <p className="mt-2 text-xs text-text-muted">
+              <p className="mt-2 text-xs text-muted-foreground">
                 Escolta la teva pròpia sessió del navegador i agafa els tokens sense haver de tornar a iniciar sessió.
               </p>
-              <ol className="mt-3 list-decimal space-y-1 pl-4 text-xs text-text-muted">
+              <ol className="mt-3 list-decimal space-y-1 pl-4 text-xs text-muted-foreground">
                 <li>
                   Arrossega aquest botó a la barra de marcadors:{' '}
                   <a
                     href={bookmarkletHref}
                     onClick={(e) => e.preventDefault()}
-                    className="inline-block cursor-grab rounded-md bg-accent px-3 py-1 font-semibold text-bg active:cursor-grabbing"
+                    className="inline-block cursor-grab rounded-md bg-primary px-3 py-1 font-semibold text-bg active:cursor-grabbing"
                   >
                     🎣 Agafa el token
                   </a>
@@ -229,7 +229,7 @@ export default function Onboarding() {
             </details>
 
             <details className="mt-3 rounded-xl border border-border p-4">
-              <summary className="cursor-pointer text-sm font-semibold text-text-muted">Alternativa: enganxar manualment</summary>
+              <summary className="cursor-pointer text-sm font-semibold text-muted-foreground">Alternativa: enganxar manualment</summary>
               <form onSubmit={saveTokens} className="mt-3 space-y-3">
                 <textarea
                   required
@@ -237,20 +237,20 @@ export default function Onboarding() {
                   value={accessToken}
                   onChange={(e) => setAccessToken(e.target.value)}
                   rows={3}
-                  className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-xs font-mono outline-none focus:border-accent"
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs font-mono outline-none focus:border-primary"
                 />
                 <textarea
                   placeholder="refresh_token (opcional, però recomanat)"
                   value={refreshToken}
                   onChange={(e) => setRefreshToken(e.target.value)}
                   rows={2}
-                  className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-xs font-mono outline-none focus:border-accent"
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs font-mono outline-none focus:border-primary"
                 />
-                {tokenError && <p className="text-sm text-sell">{tokenError}</p>}
+                {tokenError && <p className="text-sm text-bear">{tokenError}</p>}
                 <button
                   type="submit"
                   disabled={tokenLoading}
-                  className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-bg hover:opacity-90 disabled:opacity-50"
+                  className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-bg hover:opacity-90 disabled:opacity-50"
                 >
                   {tokenLoading ? 'Desant…' : 'Desar sessió'}
                 </button>
@@ -265,11 +265,11 @@ export default function Onboarding() {
         <button
           onClick={loadLeagues}
           disabled={!account?.hasTokens || leaguesLoading}
-          className="mt-3 rounded-lg bg-accent/15 px-4 py-2 text-sm font-semibold text-accent hover:bg-accent/25 disabled:opacity-40"
+          className="mt-3 rounded-lg bg-primary/15 px-4 py-2 text-sm font-semibold text-primary hover:bg-primary/25 disabled:opacity-40"
         >
           {leaguesLoading ? 'Carregant…' : 'Detectar les meves lligues'}
         </button>
-        {leaguesError && <p className="mt-2 text-sm text-sell">{leaguesError}</p>}
+        {leaguesError && <p className="mt-2 text-sm text-bear">{leaguesError}</p>}
 
         {leagues && (
           <div className="mt-4 space-y-2">
@@ -277,7 +277,7 @@ export default function Onboarding() {
               placeholder="ID d'equip manual (només si l'autodetecció falla)"
               value={teamOverride}
               onChange={(e) => setTeamOverride(e.target.value)}
-              className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-xs outline-none focus:border-accent"
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs outline-none focus:border-primary"
             />
             {leagues.map((league) => (
               <div
@@ -286,7 +286,7 @@ export default function Onboarding() {
               >
                 <div>
                   <p className="text-sm font-medium">{league.name}</p>
-                  <p className="text-xs text-text-muted">
+                  <p className="text-xs text-muted-foreground">
                     {league.mode} · {league.teamCount} equips
                   </p>
                 </div>
@@ -295,8 +295,8 @@ export default function Onboarding() {
                   disabled={selectingLeagueId === league.id}
                   className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${
                     account?.activeLeagueId === league.id
-                      ? 'bg-buy/15 text-buy'
-                      : 'bg-accent/15 text-accent hover:bg-accent/25'
+                      ? 'bg-bull/15 text-bull'
+                      : 'bg-primary/15 text-primary hover:bg-primary/25'
                   }`}
                 >
                   {account?.activeLeagueId === league.id
@@ -307,26 +307,26 @@ export default function Onboarding() {
                 </button>
               </div>
             ))}
-            {selectError && <p className="text-sm text-sell">{selectError}</p>}
+            {selectError && <p className="text-sm text-bear">{selectError}</p>}
           </div>
         )}
       </section>
 
       <section className="mt-6 rounded-2xl border border-border bg-surface p-6">
         <h2 className="font-semibold">3. Primera sincronització</h2>
-        <p className="mt-1 text-sm text-text-muted">
+        <p className="mt-1 text-sm text-muted-foreground">
           Importa la teva plantilla, saldo, mercat i jugadors, i genera les primeres recomanacions.
         </p>
         <button
           onClick={runInitialSync}
           disabled={!account?.activeTeamId}
-          className="mt-3 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-bg hover:opacity-90 disabled:opacity-40"
+          className="mt-3 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-bg hover:opacity-90 disabled:opacity-40"
         >
           Sincronitzar ara
         </button>
-        {syncMessage && <p className="mt-2 text-sm text-text-muted">{syncMessage}</p>}
+        {syncMessage && <p className="mt-2 text-sm text-muted-foreground">{syncMessage}</p>}
         {account?.activeTeamId && (
-          <button onClick={() => navigate('/')} className="ml-3 text-sm font-semibold text-accent hover:underline">
+          <button onClick={() => navigate('/')} className="ml-3 text-sm font-semibold text-primary hover:underline">
             Ves al dashboard →
           </button>
         )}
