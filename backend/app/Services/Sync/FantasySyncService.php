@@ -13,6 +13,7 @@ use App\Models\FantasyStanding;
 use App\Models\FantasyTeam;
 use App\Models\FantasyTeamPlayer;
 use App\Services\FantasyApi\DTOs\FantasyPlayerDTO;
+use App\Services\FantasyApi\DTOs\FantasyRosterEntryDTO;
 use App\Services\FantasyApi\FantasyLeagueService;
 use App\Services\FantasyApi\FantasyMarketService;
 use App\Services\FantasyApi\FantasyPlayerService;
@@ -158,14 +159,6 @@ class FantasySyncService
         $clubNames = FantasyClub::pluck('name', 'external_id')->all();
         $rosterPlayerIds = $this->syncTeamRoster($account, $team, $clubNames);
 
-        try {
-            $this->syncOwnClauseProtection($account, $team, $league);
-        } catch (\Throwable $e) {
-            // Supplementary enrichment only (clause lock/shield state) — never
-            // block the rest of the sync (money/team value/matchday) on it.
-            Log::channel('fantasy_api')->warning('fantasy.sync.own_clause_protection_failed', ['message' => $e->getMessage()]);
-        }
-
         $teamValue = FantasyPlayer::whereIn('id', $rosterPlayerIds)->sum('market_value');
 
         $team->update(['money' => $money, 'team_value' => $teamValue]);
@@ -227,40 +220,6 @@ class FantasySyncService
     }
 
     /**
-     * Buyout-clause lock/shield state for your *own* roster. The endpoint
-     * syncTeamRoster() uses for the own team (`getLineup()`) never carries
-     * `buyoutClauseLockedEndTime`/`isShielded` — confirmed live, same gap
-     * documented on FantasyTeamService::getLineup() — only the league-scoped
-     * endpoint (already used for rival rosters) exposes it, and it works
-     * for your own team too. A supplementary pass rather than switching
-     * syncTeamRoster() itself, since that response lacks `is_starter` for
-     * this same team, which the lineup endpoint alone provides.
-     */
-    private function syncOwnClauseProtection(FantasyAccount $account, FantasyTeam $team, FantasyLeague $league): void
-    {
-        $entries = $this->teamService->getLeagueTeamRoster($account, $league->external_id, $team->external_id);
-
-        foreach ($entries as $entry) {
-            if (! $entry->player->externalId) {
-                continue;
-            }
-
-            $player = FantasyPlayer::where('external_id', $entry->player->externalId)->first();
-
-            if (! $player) {
-                continue;
-            }
-
-            FantasyTeamPlayer::where('fantasy_team_id', $team->id)
-                ->where('fantasy_player_id', $player->id)
-                ->update([
-                    'clause_locked_until' => $entry->clauseLockedUntil,
-                    'is_locked' => $entry->isShielded ?? false,
-                ]);
-        }
-    }
-
-    /**
      * @param  array<string, string>  $clubNames
      * @return int[] fantasy_players.id of everyone currently on this team's roster
      */
@@ -268,11 +227,39 @@ class FantasySyncService
     {
         // The direct lineup endpoint 403s for anyone else's team (confirmed
         // live) — rivals' rosters can only be read through the league-scoped
-        // endpoint, which also happens to be the only place buyout-clause
-        // lock/shield state is exposed.
-        $rosterEntries = $team->is_mine
-            ? $this->teamService->getLineup($account, $team->external_id)
-            : $this->teamService->getLeagueTeamRoster($account, $team->league->external_id, $team->external_id);
+        // endpoint. That endpoint is also the source of truth for the own
+        // team's FULL squad: confirmed live that getLineup() only returns
+        // players currently placed in the matchday formation (starters +
+        // whatever's in the bench slots), silently omitting any squad player
+        // not slotted into it — this used to delete those players from the
+        // roster on every sync and undercount team value. getLineup() is
+        // still consulted for the own team, but only to know which of the
+        // full squad's players are starters right now.
+        if ($team->is_mine) {
+            $fullRoster = $this->teamService->getLeagueTeamRoster($account, $team->league->external_id, $team->external_id);
+
+            try {
+                $starterExternalIds = collect($this->teamService->getLineup($account, $team->external_id))
+                    ->filter(fn (FantasyRosterEntryDTO $entry) => $entry->isStarter)
+                    ->pluck('player.externalId')
+                    ->flip();
+            } catch (\Throwable $e) {
+                Log::channel('fantasy_api')->warning('fantasy.sync.own_lineup_failed', ['message' => $e->getMessage()]);
+                $starterExternalIds = collect();
+            }
+
+            $rosterEntries = array_map(
+                fn (FantasyRosterEntryDTO $entry) => new FantasyRosterEntryDTO(
+                    $entry->player,
+                    $starterExternalIds->has($entry->player->externalId),
+                    $entry->clauseLockedUntil,
+                    $entry->isShielded,
+                ),
+                $fullRoster,
+            );
+        } else {
+            $rosterEntries = $this->teamService->getLeagueTeamRoster($account, $team->league->external_id, $team->external_id);
+        }
 
         $rosterPlayerIds = [];
 

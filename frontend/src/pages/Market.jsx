@@ -4,7 +4,7 @@ import apiClient from '../api/client'
 import ScoreRing from '../components/ScoreRing'
 import Sparkline from '../components/Sparkline'
 import { ShopIcon, ArrowRightIcon, ChevronDownIcon } from '../components/Icons'
-import { formatMoneyM, formatPercent, formatCountdown, POSITION_LABELS, initials } from '../utils/format'
+import { formatMoneyM, formatDelta, formatPercent, formatCountdown, POSITION_LABELS, initials } from '../utils/format'
 
 const POSITIONS = ['GK', 'DF', 'MF', 'FW']
 const TREND_OPTIONS = [
@@ -27,6 +27,7 @@ const SORT_ACCESSORS = {
   position: (r) => r.player.position,
   owner: (r) => r.sellerTeam || '',
   marketValue: (r) => r.marketValue,
+  change24h: (r) => r.trend?.change24h ?? r.externalTrend?.delta1d,
   pctChange7d: (r) => r.trend?.pctChange7d,
   externalPct7d: (r) => r.externalTrend?.pct7d,
   averagePoints: (r) => r.player.averagePoints,
@@ -76,6 +77,22 @@ function MarketRow({ row }) {
   return (
     <>
       <tr className={`border-b border-border last:border-0 hover:bg-surface-hover ${row.action === 'BUY' ? 'bg-buy/5' : ''}`}>
+        <td className="px-4 py-3">
+          {(() => {
+            const own = row.trend?.change24h
+            const eurDelta = own ?? row.externalTrend?.delta1d
+            if (eurDelta == null) return <span className="text-text-muted">—</span>
+            return (
+              <span
+                className={eurDelta > 0 ? 'text-buy' : eurDelta < 0 ? 'text-sell' : 'text-text-muted'}
+                title={own == null ? 'Font externa (futbolfantasy.com, no oficial) — encara no tenim prou historial propi' : undefined}
+              >
+                {eurDelta >= 0 ? '↗' : '↘'} {formatDelta(eurDelta)}
+                {own == null && <span className="text-[9px] text-text-muted"> *ext.</span>}
+              </span>
+            )
+          })()}
+        </td>
         <td className="px-4 py-3">
           <Link to={`/players/${row.player.id}`} className="flex items-center gap-2.5 hover:text-accent">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-hold/15 text-[10px] font-bold text-hold">
@@ -148,7 +165,7 @@ function MarketRow({ row }) {
       </tr>
       {open && b && (
         <tr className="border-b border-border bg-bg/40 last:border-0">
-          <td colSpan={10} className="px-4 py-4">
+          <td colSpan={11} className="px-4 py-4">
             <div className="grid gap-4 lg:grid-cols-[1fr_auto]">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
@@ -397,6 +414,9 @@ export default function Market() {
         <table className="w-full min-w-220 text-sm">
           <thead>
             <tr className="border-b border-border text-left text-xs uppercase text-text-muted">
+              <th className="cursor-pointer select-none px-4 py-3 hover:text-text" onClick={() => toggleSort('change24h')}>
+                24H{sortArrow('change24h')}
+              </th>
               <th className="cursor-pointer select-none px-4 py-3 hover:text-text" onClick={() => toggleSort('player')}>
                 Jugador{sortArrow('player')}
               </th>
