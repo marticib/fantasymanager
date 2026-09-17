@@ -173,6 +173,20 @@ class ClausePurchaseOrderService
             throw new RuntimeException('Account or league no longer exists.');
         }
 
+        if (! $account->activeTeam) {
+            throw new RuntimeException('No active team on this account.');
+        }
+
+        // Checked live, same as the clause value/lock state in processOrder()
+        // — fantasy_teams.money is only as fresh as the last fantasy:sync-team
+        // run (every 30 min by default), which is nowhere near tight enough
+        // right before spending real money.
+        $availableMoney = $this->teamService->getMoney($account, $account->activeTeam->external_id);
+
+        if ($availableMoney < $clauseValue) {
+            throw new RuntimeException("No tens prou diners: calen {$clauseValue}, en tens {$availableMoney}.");
+        }
+
         $this->clauseService->payClause($account, $league->external_id, $order->player_team_id, $clauseValue);
 
         $order->update([

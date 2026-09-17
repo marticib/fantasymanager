@@ -578,7 +578,7 @@ export default function PlayerDetail() {
               <span className={`mt-4 inline-flex rounded-lg px-3 py-2 text-sm font-semibold ${ACTION_BG_CLASS[color]}`}>{label}</span>
             )}
 
-            {data.context === 'OWNED_BY_RIVAL' && data.clauseValue != null && (
+            {data.owner && !data.owner.isMine && data.clauseValue != null && (
               <div className="mt-4 border-t border-border pt-4">
                 {!data.clausePurchaseOrder && (
                   <button

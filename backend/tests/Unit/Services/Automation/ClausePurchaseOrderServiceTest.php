@@ -138,6 +138,7 @@ class ClausePurchaseOrderServiceTest extends TestCase
             '*/leagues/*/teams/*' => Http::response([
                 'players' => [$this->rosterSlot('99', 'Clause Target', 10_000_000, 'PT-99', null)],
             ], 200),
+            '*/teams/*/money*' => Http::response(['money' => 99_000_000], 200),
             '*/league/*/buyout/*/pay*' => Http::response(['data' => ['success' => true]], 200),
             '*' => Http::response(['data' => []], 200),
         ]);
@@ -151,6 +152,29 @@ class ClausePurchaseOrderServiceTest extends TestCase
         $this->assertNotNull($fresh->executed_at);
     }
 
+    /** The whole point: don't rely on LaLiga's own rejection for this — check live cash before ever calling payClause(). */
+    public function test_insufficient_cash_fails_before_ever_calling_the_api(): void
+    {
+        [$account, , $rivalTeam, $player] = $this->fixture();
+        $order = app(ClausePurchaseOrderService::class)->createOrder($account, $player);
+
+        Http::fake([
+            '*/leagues/*/teams/*' => Http::response([
+                'players' => [$this->rosterSlot('99', 'Clause Target', 10_000_000, 'PT-99', null)],
+            ], 200),
+            '*/teams/*/money*' => Http::response(['money' => 4_000_000], 200),
+            '*' => Http::response(['data' => []], 200),
+        ]);
+
+        app(ClausePurchaseOrderService::class)->processPendingOrders();
+
+        Http::assertNotSent(fn ($request) => str_contains($request->url(), '/buyout/'));
+        $fresh = $order->fresh();
+        $this->assertSame(FantasyClausePurchaseOrder::STATUS_FAILED, $fresh->status);
+        $this->assertStringContainsString('No tens prou diners', $fresh->error_message);
+        $this->assertNull($fresh->executed_clause_value);
+    }
+
     /** Insufficient funds (or any other real rejection) must surface LaLiga's own reason, never a bare "rejected (400)". */
     public function test_a_real_api_rejection_like_insufficient_funds_fails_with_the_actual_reason(): void
     {
@@ -161,6 +185,7 @@ class ClausePurchaseOrderServiceTest extends TestCase
             '*/leagues/*/teams/*' => Http::response([
                 'players' => [$this->rosterSlot('99', 'Clause Target', 10_000_000, 'PT-99', null)],
             ], 200),
+            '*/teams/*/money*' => Http::response(['money' => 99_000_000], 200),
             '*/league/*/buyout/*/pay*' => Http::response(['message' => 'Fons insuficients'], 400),
             '*' => Http::response(['data' => []], 200),
         ]);
@@ -203,6 +228,7 @@ class ClausePurchaseOrderServiceTest extends TestCase
         ]);
 
         Http::fake([
+            '*/teams/*/money*' => Http::response(['money' => 99_000_000], 200),
             '*/league/*/buyout/*/pay*' => Http::response(['data' => ['success' => true]], 200),
             '*' => Http::response(['data' => []], 200),
         ]);
@@ -213,6 +239,29 @@ class ClausePurchaseOrderServiceTest extends TestCase
         $fresh = $order->fresh();
         $this->assertSame(FantasyClausePurchaseOrder::STATUS_EXECUTED, $fresh->status);
         $this->assertSame(14_000_000, $fresh->executed_clause_value);
+    }
+
+    /** "Donar l'ordre de pagar" (confirming) must also check live cash first, same as the automatic path. */
+    public function test_confirming_with_insufficient_cash_fails_before_ever_calling_the_api(): void
+    {
+        [$account, , , $player] = $this->fixture();
+        $order = app(ClausePurchaseOrderService::class)->createOrder($account, $player);
+        $order->update([
+            'status' => FantasyClausePurchaseOrder::STATUS_NEEDS_CONFIRMATION,
+            'pending_confirmation_clause_value' => 14_000_000,
+        ]);
+
+        Http::fake([
+            '*/teams/*/money*' => Http::response(['money' => 4_000_000], 200),
+            '*' => Http::response(['data' => []], 200),
+        ]);
+
+        app(ClausePurchaseOrderService::class)->confirmAndExecute($order);
+
+        Http::assertNotSent(fn ($request) => str_contains($request->url(), '/buyout/'));
+        $fresh = $order->fresh();
+        $this->assertSame(FantasyClausePurchaseOrder::STATUS_FAILED, $fresh->status);
+        $this->assertStringContainsString('No tens prou diners', $fresh->error_message);
     }
 
     /** A rejected manual confirmation must fail the order gracefully, never throw out to the caller (the API's own payment page shouldn't 500). */
@@ -226,6 +275,7 @@ class ClausePurchaseOrderServiceTest extends TestCase
         ]);
 
         Http::fake([
+            '*/teams/*/money*' => Http::response(['money' => 99_000_000], 200),
             '*/league/*/buyout/*/pay*' => Http::response(['message' => 'Fons insuficients'], 400),
             '*' => Http::response(['data' => []], 200),
         ]);

@@ -388,4 +388,30 @@ class PlayerControllerTest extends TestCase
         $this->assertNull($list->json('data.0.owner'));
         $this->assertNull($list->json('data.0.clauseValue'));
     }
+
+    /**
+     * 17. A rival's player who's ALSO listed on the market still exposes a
+     * clause value/owner and a clausePurchaseOrder slot — paying a clause
+     * works independently of a market listing, so context flipping to
+     * ON_MARKET (the more actionable card to show) must never hide it.
+     */
+    public function test_17_a_rival_player_also_on_the_market_still_allows_scheduling_a_clause_order(): void
+    {
+        ['user' => $user, 'league' => $league] = $this->setupFixture();
+        $player = $this->player('Listed Rival Player', 'FW', 10_000_000);
+        $rivalTeam = FantasyTeam::create(['fantasy_league_id' => $league->id, 'external_id' => uniqid(), 'name' => 'Rival']);
+        FantasyTeamPlayer::create(['fantasy_team_id' => $rivalTeam->id, 'fantasy_player_id' => $player->id, 'player_team_id' => 'PT-1', 'clause_value' => 9_000_000]);
+        $this->marketListing($league, $player, 10_000_000);
+
+        $response = $this->actingAs($user, 'sanctum')->getJson("/api/players/{$player->id}");
+
+        $response->assertOk();
+        $this->assertSame('ON_MARKET', $response->json('context'));
+        $this->assertSame(9_000_000, $response->json('clauseValue'));
+        $this->assertFalse($response->json('owner.isMine'));
+        $this->assertArrayHasKey('clausePurchaseOrder', $response->json());
+
+        $order = $this->actingAs($user, 'sanctum')->postJson('/api/clause-orders', ['fantasy_player_id' => $player->id]);
+        $order->assertCreated();
+    }
 }

@@ -155,7 +155,12 @@ class PlayerController extends Controller
 
         $context = $this->ownershipContext($owner, $listing);
 
-        $clausePurchaseOrder = $context === 'OWNED_BY_RIVAL'
+        // Deliberately NOT gated on $context === 'OWNED_BY_RIVAL': paying a
+        // clause works independently of whether the owner has ALSO listed
+        // the player on the market (a rival-owned player who's up for sale
+        // gets context ON_MARKET instead, since that's the more actionable
+        // card to show — but the clause itself is still payable).
+        $clausePurchaseOrder = ($owner && ! $owner->is_mine && $teamPlayer->clause_value !== null)
             ? FantasyClausePurchaseOrder::where('fantasy_account_id', $account->id)
                 ->where('fantasy_player_id', $player->id)
                 ->whereIn('status', [
