@@ -216,12 +216,18 @@ class ClausePurchaseOrderService
     {
         $message = $this->describeFailure($e);
 
+        // Recording the real failure on the order is the part that must
+        // never be skipped — it comes before the (diagnostic-only) log call,
+        // in case something about logging itself is broken (see the
+        // 'fantasy_api' channel's own ignore_exceptions note in
+        // config/logging.php — this is defense in depth on top of that,
+        // not a substitute for it).
+        $order->update(['status' => FantasyClausePurchaseOrder::STATUS_FAILED, 'error_message' => $message]);
+
         Log::channel('fantasy_api')->warning('fantasy.clause_orders.process_failed', [
             'order_id' => $order->id,
             'message' => $message,
         ]);
-
-        $order->update(['status' => FantasyClausePurchaseOrder::STATUS_FAILED, 'error_message' => $message]);
     }
 
     // LaLiga's real payClause response shape is unconfirmed (never called

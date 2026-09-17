@@ -131,7 +131,22 @@ return [
             'handler' => NullHandler::class,
         ],
 
+        // Wrapped in a 'stack' with ignore_exceptions so a broken log
+        // destination (e.g. a file the web server user can't write to —
+        // confirmed live: happened when an artisan command run manually via
+        // SSH as a different user created that day's rotated log file with
+        // the wrong ownership) degrades to "this line didn't get logged"
+        // instead of taking down the actual request/job that triggered the
+        // log call — this channel is written to on every single LaLiga API
+        // request (success or failure), so a logging failure here must
+        // never be allowed to look like the request itself failed.
         'fantasy_api' => [
+            'driver' => 'stack',
+            'channels' => ['fantasy_api_file'],
+            'ignore_exceptions' => true,
+        ],
+
+        'fantasy_api_file' => [
             'driver' => 'daily',
             'path' => storage_path('logs/fantasy-api.log'),
             'level' => env('LOG_LEVEL', 'debug'),
