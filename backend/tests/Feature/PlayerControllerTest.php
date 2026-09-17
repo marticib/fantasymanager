@@ -12,6 +12,7 @@ use App\Models\FantasyTeamPlayer;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 class PlayerControllerTest extends TestCase
@@ -397,7 +398,10 @@ class PlayerControllerTest extends TestCase
      */
     public function test_17_a_rival_player_also_on_the_market_still_allows_scheduling_a_clause_order(): void
     {
-        ['user' => $user, 'league' => $league] = $this->setupFixture();
+        ['user' => $user, 'account' => $account, 'league' => $league] = $this->setupFixture();
+        // createOrder() checks the clause live right after creating it (see
+        // ClausePurchaseOrderService) — needs real-looking tokens + a fake.
+        $account->forceFill(['access_token' => 'token', 'refresh_token' => 'refresh', 'token_expires_at' => now()->addHours(12)])->save();
         $player = $this->player('Listed Rival Player', 'FW', 10_000_000);
         $rivalTeam = FantasyTeam::create(['fantasy_league_id' => $league->id, 'external_id' => uniqid(), 'name' => 'Rival']);
         FantasyTeamPlayer::create(['fantasy_team_id' => $rivalTeam->id, 'fantasy_player_id' => $player->id, 'player_team_id' => 'PT-1', 'clause_value' => 9_000_000]);
@@ -411,7 +415,19 @@ class PlayerControllerTest extends TestCase
         $this->assertFalse($response->json('owner.isMine'));
         $this->assertArrayHasKey('clausePurchaseOrder', $response->json());
 
+        Http::fake([
+            '*/leagues/*/teams/*' => Http::response(['players' => [[
+                'playerMaster' => ['id' => '1', 'name' => 'Listed Rival Player', 'positionId' => 4, 'marketValue' => 10_000_000, 'points' => 10, 'averagePoints' => 1.0, 'playerStatus' => 'ok'],
+                'buyoutClause' => 9_000_000,
+                'playerTeamId' => 'PT-1',
+                'buyoutClauseLockedEndTime' => now()->addDay()->toIso8601String(),
+                'isShielded' => false,
+            ]]], 200),
+            '*' => Http::response(['data' => []], 200),
+        ]);
+
         $order = $this->actingAs($user, 'sanctum')->postJson('/api/clause-orders', ['fantasy_player_id' => $player->id]);
         $order->assertCreated();
+        $order->assertJsonPath('status', 'PENDING');
     }
 }

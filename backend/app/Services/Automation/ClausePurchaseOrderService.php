@@ -18,11 +18,15 @@ use Throwable;
  * The app's first automated *write* action against the real LaLiga API: a
  * user schedules paying a rival's buyout clause the moment it unlocks.
  *
- * processPendingOrders() (run on a schedule, see routes/console.php) is the
- * only place that ever calls FantasyClauseService::payClause() — nothing
- * else in this codebase invokes a write endpoint automatically. It always
- * re-checks live (never trusts the slower fantasy:sync-clauses snapshot,
- * see FantasySyncService) whether the clause is still locked and what it
+ * processOrder() (the shared check-and-maybe-pay step) runs from two places:
+ * createOrder() itself (immediately, so scheduling an order for a clause
+ * that's ALREADY unlocked doesn't sit there for up to
+ * fantasy.sync.clause_orders_frequency_minutes doing nothing) and
+ * processPendingOrders() (run on a schedule, see routes/console.php, for
+ * orders that were still locked at creation time). Nothing else in this
+ * codebase invokes a write endpoint automatically. Both always re-check live
+ * (never trust the slower fantasy:sync-clauses snapshot, see
+ * FantasySyncService) whether the clause is still locked and what it
  * currently costs, since racing other managers is the whole point:
  *   - still locked -> leave PENDING, try again next run.
  *   - unlocked, price unchanged or lower -> pay it automatically.
@@ -68,7 +72,7 @@ class ClausePurchaseOrderService
             throw new InvalidArgumentException('Missing clause value or roster data for this player — try syncing first.');
         }
 
-        return FantasyClausePurchaseOrder::create([
+        $order = FantasyClausePurchaseOrder::create([
             'fantasy_account_id' => $account->id,
             'fantasy_league_id' => $league->id,
             'fantasy_player_id' => $player->id,
@@ -77,6 +81,18 @@ class ClausePurchaseOrderService
             'clause_value_at_order' => $teamPlayer->clause_value,
             'status' => FantasyClausePurchaseOrder::STATUS_PENDING,
         ]);
+
+        // If the clause is already unlocked right now, there's no reason to
+        // make the user wait for the next fantasy:process-clause-orders tick
+        // (up to FANTASY_SYNC_CLAUSE_ORDERS_FREQUENCY minutes later) — check
+        // immediately, same logic the scheduled job uses.
+        try {
+            $this->processOrder($order);
+        } catch (Throwable $e) {
+            $this->markFailed($order, $e);
+        }
+
+        return $order->fresh();
     }
 
     public function cancelOrder(FantasyClausePurchaseOrder $order): void

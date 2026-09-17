@@ -10,6 +10,7 @@ use App\Models\FantasyTeam;
 use App\Models\FantasyTeamPlayer;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 class ClausePurchaseOrderControllerTest extends TestCase
@@ -19,7 +20,12 @@ class ClausePurchaseOrderControllerTest extends TestCase
     private function fixture(): array
     {
         $user = User::factory()->create();
-        $account = FantasyAccount::create(['user_id' => $user->id]);
+        $account = FantasyAccount::create([
+            'user_id' => $user->id,
+            'access_token' => 'token',
+            'refresh_token' => 'refresh',
+            'token_expires_at' => now()->addHours(12),
+        ]);
         $league = FantasyLeague::create(['fantasy_account_id' => $account->id, 'external_id' => 'L1', 'name' => 'Test League']);
         $myTeam = FantasyTeam::create(['fantasy_league_id' => $league->id, 'external_id' => 'T1', 'name' => 'My Team', 'is_mine' => true]);
         $rivalTeam = FantasyTeam::create(['fantasy_league_id' => $league->id, 'external_id' => 'T2', 'name' => 'Rival', 'is_mine' => false]);
@@ -36,9 +42,27 @@ class ClausePurchaseOrderControllerTest extends TestCase
         return [$user, $player];
     }
 
+    // createOrder() checks the clause live right after creating it (see
+    // ClausePurchaseOrderService) — faked here as still locked so tests that
+    // only care about the PENDING row's shape aren't affected by that check.
+    private function fakeStillLocked(): void
+    {
+        Http::fake([
+            '*/leagues/*/teams/*' => Http::response(['players' => [[
+                'playerMaster' => ['id' => '1', 'name' => 'Clause Target', 'positionId' => 1, 'marketValue' => 6_000_000, 'points' => 10, 'averagePoints' => 1.0, 'playerStatus' => 'ok'],
+                'buyoutClause' => 10_000_000,
+                'playerTeamId' => 'PT-1',
+                'buyoutClauseLockedEndTime' => now()->addDay()->toIso8601String(),
+                'isShielded' => false,
+            ]]], 200),
+            '*' => Http::response(['data' => []], 200),
+        ]);
+    }
+
     public function test_creates_lists_and_cancels_an_order(): void
     {
         [$user, $player] = $this->fixture();
+        $this->fakeStillLocked();
 
         $create = $this->actingAs($user, 'sanctum')->postJson('/api/clause-orders', ['fantasy_player_id' => $player->id]);
         $create->assertCreated();
@@ -59,6 +83,7 @@ class ClausePurchaseOrderControllerTest extends TestCase
     public function test_another_accounts_order_can_never_be_confirmed_or_cancelled(): void
     {
         [$user, $player] = $this->fixture();
+        $this->fakeStillLocked();
         $order = $this->actingAs($user, 'sanctum')->postJson('/api/clause-orders', ['fantasy_player_id' => $player->id])->json();
 
         $stranger = User::factory()->create();
