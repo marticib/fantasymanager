@@ -348,4 +348,44 @@ class PlayerControllerTest extends TestCase
         $this->assertSame('ON_MARKET', $onMarket->json('context'));
         $this->assertSame('BUY', $onMarket->json('decision.type'));
     }
+
+    /**
+     * 16. Regression test for a real production bug: fantasy_players is a
+     * global catalog shared by every account, but ownership is only ever
+     * true within one league. show() used to look up the *latest*
+     * FantasyTeamPlayer row for a player id with no league scope at all —
+     * so a real player rostered in someone else's account/league (whoever
+     * happened to sync most recently) could win over the row for the
+     * league you're actually viewing, leaking their context/clause/owner
+     * into your page. Confirmed live with two real separate users.
+     */
+    public function test_16_a_player_owned_in_another_accounts_league_never_leaks_into_this_one(): void
+    {
+        ['user' => $user, 'league' => $league] = $this->setupFixture();
+        $player = $this->player('Shared Across Leagues', 'MF', 10_000_000);
+
+        // A completely different account, different league, owns this same
+        // real player and — crucially — synced *after* the fixture above,
+        // so its FantasyTeamPlayer row has the higher id.
+        $strangerUser = User::factory()->create();
+        $strangerAccount = FantasyAccount::create(['user_id' => $strangerUser->id]);
+        $strangerLeague = FantasyLeague::create(['fantasy_account_id' => $strangerAccount->id, 'external_id' => uniqid(), 'name' => 'Someone Elses League']);
+        $strangerTeam = FantasyTeam::create(['fantasy_league_id' => $strangerLeague->id, 'external_id' => uniqid(), 'name' => 'Their Team', 'is_mine' => true]);
+        FantasyTeamPlayer::create(['fantasy_team_id' => $strangerTeam->id, 'fantasy_player_id' => $player->id, 'clause_value' => 99_000_000]);
+
+        $response = $this->actingAs($user, 'sanctum')->getJson("/api/players/{$player->id}");
+
+        // Not on any team in *my* league -> FREE, never the stranger's context/clause.
+        $response->assertOk();
+        $this->assertSame('FREE', $response->json('context'));
+        $this->assertNull($response->json('owner'));
+        $this->assertNull($response->json('clauseValue'));
+
+        // Same guarantee for the paginated list (index()) — only this one
+        // player exists in this test, so it's always data.0.
+        $list = $this->actingAs($user, 'sanctum')->getJson('/api/players');
+        $list->assertOk();
+        $this->assertNull($list->json('data.0.owner'));
+        $this->assertNull($list->json('data.0.clauseValue'));
+    }
 }

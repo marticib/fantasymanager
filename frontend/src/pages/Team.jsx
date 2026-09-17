@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import apiClient from '../api/client'
 import ChangeBadge from '../components/ChangeBadge'
-import Sparkline from '../components/Sparkline'
 import { TrendingUpIcon, WalletIcon, LinkIcon, ChevronDownIcon } from '../components/Icons'
 import { formatMoneyM, formatPercent, formatDelta, formatFullDate, POSITION_LABELS, initials } from '../utils/format'
 
@@ -49,6 +48,22 @@ function PlayerRow({ p }) {
         }`}
       >
         <td className="px-4 py-3">
+          {(() => {
+            const own = p.trend?.change24h
+            const eurDelta = own ?? p.externalTrend?.delta1d
+            if (eurDelta == null) return <span className="text-text-muted">—</span>
+            return (
+              <span
+                className={eurDelta > 0 ? 'text-buy' : eurDelta < 0 ? 'text-sell' : 'text-text-muted'}
+                title={own == null ? 'Font externa (futbolfantasy.com, no oficial) — encara no tenim prou historial propi' : undefined}
+              >
+                {eurDelta >= 0 ? '↗' : '↘'} {formatDelta(eurDelta)}
+                {own == null && <span className="text-[9px] text-text-muted"> *ext.</span>}
+              </span>
+            )
+          })()}
+        </td>
+        <td className="px-4 py-3">
           <Link to={`/players/${p.id}`} className="flex items-center gap-2.5 hover:text-accent">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-hold/15 text-[10px] font-bold text-hold">
               {p.imageUrl ? <img src={p.imageUrl} alt="" className="h-full w-full object-cover" /> : initials(p.name)}
@@ -65,38 +80,7 @@ function PlayerRow({ p }) {
           </span>
         </td>
         <td className="px-4 py-3 font-medium">{formatMoneyM(p.marketValue)}</td>
-        <td className="px-4 py-3">
-          {(() => {
-            const own = p.trend?.pctChange24h
-            const pct = own ?? p.externalTrend?.pct1d
-            if (pct == null) return <span className="text-text-muted">—</span>
-            const eurDelta = own != null ? p.trend?.change24h : p.externalTrend?.delta1d
-            return (
-              <div
-                className={pct > 0 ? 'text-buy' : pct < 0 ? 'text-sell' : 'text-text-muted'}
-                title={own == null ? 'Font externa (futbolfantasy.com, no oficial) — encara no tenim prou historial propi' : undefined}
-              >
-                <span>
-                  {pct >= 0 ? '↗' : '↘'} {formatPercent(pct)}
-                  {own == null && <span className="text-[9px] text-text-muted"> *ext.</span>}
-                </span>
-                {eurDelta != null && <p className="text-[10px] opacity-80">{formatDelta(eurDelta)}</p>}
-              </div>
-            )
-          })()}
-        </td>
         <td className="px-4 py-3">{p.clauseValue ? formatMoneyM(p.clauseValue) : '—'}</td>
-        <td
-          className="w-24 px-4 py-3"
-          title={
-            p.historySource === 'external'
-              ? "Línia reconstruïda amb dades de futbolfantasy.com (no oficial) — encara no tenim prou historial propi"
-              : undefined
-          }
-        >
-          <Sparkline data={p.history} />
-          {p.historySource === 'external' && <span className="text-[9px] text-text-muted">*ext.</span>}
-        </td>
         <td className={`px-4 py-3 ${p.externalTrend?.pct7d > 0 ? 'text-buy' : p.externalTrend?.pct7d < 0 ? 'text-sell' : 'text-text-muted'}`}>
           {p.externalTrend?.pct7d != null
             ? `${p.externalTrend.pct7d >= 0 ? '↗' : '↘'} ${formatPercent(p.externalTrend.pct7d)}`
@@ -145,7 +129,7 @@ function PlayerRow({ p }) {
       </tr>
       {open && d && (
         <tr className="border-b border-border bg-bg/40 last:border-0">
-          <td colSpan={10} className="px-4 py-4">
+          <td colSpan={9} className="px-4 py-4">
             <div className="grid gap-4 lg:grid-cols-[1fr_auto]">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
@@ -270,12 +254,11 @@ export default function Team() {
         <table className="w-full min-w-220 text-sm">
           <thead>
             <tr className="border-b border-border text-left text-xs uppercase text-text-muted">
+              <th className="px-4 py-3">24H</th>
               <th className="px-4 py-3">Jugador</th>
               <th className="px-4 py-3">Pos.</th>
               <th className="px-4 py-3">Valor</th>
-              <th className="px-4 py-3">24H</th>
               <th className="px-4 py-3">Clàusula</th>
-              <th className="px-4 py-3">7D</th>
               <th className="px-4 py-3" title="Font externa (futbolfantasy.com, no oficial)">
                 7D ext.*
               </th>

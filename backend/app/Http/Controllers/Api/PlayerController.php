@@ -33,6 +33,7 @@ class PlayerController extends Controller
     public function index(Request $request, PlayerTrendPresenter $presenter)
     {
         $account = $this->currentAccount($request);
+        $league = $account->activeLeague;
         $query = FantasyPlayer::query();
 
         if ($position = $request->query('position')) {
@@ -53,15 +54,24 @@ class PlayerController extends Controller
             ->get()
             ->keyBy('fantasy_player_id');
 
-        // Latest team_players row per player (a player only ever belongs to
-        // one active roster at a time in this MVP's single-league scope) —
-        // same "who owns this, and what's their clause" the Market/Clauses
-        // screens already read, just fetched in bulk for a paginated list.
-        $ownerships = FantasyTeamPlayer::whereIn('fantasy_player_id', $playerIds)
-            ->with('team')
-            ->get()
-            ->groupBy('fantasy_player_id')
-            ->map(fn ($rows) => $rows->sortByDesc('id')->first());
+        // Latest team_players row per player, scoped to the account's own
+        // active league — same "who owns this, and what's their clause" the
+        // Market/Clauses screens already read, just fetched in bulk for a
+        // paginated list. Bug fixed here, confirmed live: this used to query
+        // by fantasy_player_id alone with no league scope at all, so a real
+        // player owned in a *different* league entirely (someone else's
+        // account, or even another of your own leagues) could silently win
+        // over the row that actually belongs to the league you're looking
+        // at — the fantasy_players catalog is global and shared, but who
+        // owns a given player is only ever true within one league.
+        $ownerships = $league
+            ? FantasyTeamPlayer::whereIn('fantasy_player_id', $playerIds)
+                ->whereHas('team', fn ($q) => $q->where('fantasy_league_id', $league->id))
+                ->with('team')
+                ->get()
+                ->groupBy('fantasy_player_id')
+                ->map(fn ($rows) => $rows->sortByDesc('id')->first())
+            : collect();
 
         $players->getCollection()->transform(function (FantasyPlayer $player) use ($account, $presenter, $externalTrends, $ownerships) {
             $externalTrend = $externalTrends->get($player->id);
@@ -119,7 +129,20 @@ class PlayerController extends Controller
         $externalTrend = FantasyExternalTrend::where('fantasy_player_id', $player->id)->where('source', 'futbolfantasy')->first();
         $p = $presenter->present($player, $account, $externalTrend);
 
-        $teamPlayer = FantasyTeamPlayer::where('fantasy_player_id', $player->id)->latest('id')->first();
+        // Scoped to the account's own active league — real bug fixed here,
+        // confirmed live with multiple real users on real separate leagues:
+        // this used to query by fantasy_player_id alone with no league
+        // scope, so a real player owned in a *different* league (someone
+        // else's account, or another of your own leagues) could win over
+        // the row for the league you're actually viewing, showing the
+        // wrong owner/clause/context. fantasy_players is a global shared
+        // catalog, but ownership is only ever true within one league.
+        $teamPlayer = $league
+            ? FantasyTeamPlayer::where('fantasy_player_id', $player->id)
+                ->whereHas('team', fn ($q) => $q->where('fantasy_league_id', $league->id))
+                ->latest('id')
+                ->first()
+            : null;
         $owner = $teamPlayer?->team;
 
         $listing = $league
