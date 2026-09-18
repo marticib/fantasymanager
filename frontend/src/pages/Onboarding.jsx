@@ -162,7 +162,7 @@ export default function Onboarding() {
                 <button
                   onClick={startOAuth}
                   disabled={oauthStarting}
-                  className="mt-3 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-bg hover:opacity-90 disabled:opacity-50"
+                  className="mt-3 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-background hover:opacity-90 disabled:opacity-50"
                 >
                   {oauthStarting ? 'Generant…' : '1. Obrir login de LaLiga'}
                 </button>
@@ -191,7 +191,7 @@ export default function Onboarding() {
                     <button
                       type="submit"
                       disabled={oauthFinishing}
-                      className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-bg hover:opacity-90 disabled:opacity-50"
+                      className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-background hover:opacity-90 disabled:opacity-50"
                     >
                       {oauthFinishing ? 'Connectant…' : '2. Connectar'}
                     </button>
@@ -214,7 +214,7 @@ export default function Onboarding() {
                   <a
                     href={bookmarkletHref}
                     onClick={(e) => e.preventDefault()}
-                    className="inline-block cursor-grab rounded-md bg-primary px-3 py-1 font-semibold text-bg active:cursor-grabbing"
+                    className="inline-block cursor-grab rounded-md bg-primary px-3 py-1 font-semibold text-background active:cursor-grabbing"
                   >
                     🎣 Agafa el token
                   </a>
@@ -250,7 +250,7 @@ export default function Onboarding() {
                 <button
                   type="submit"
                   disabled={tokenLoading}
-                  className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-bg hover:opacity-90 disabled:opacity-50"
+                  className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-background hover:opacity-90 disabled:opacity-50"
                 >
                   {tokenLoading ? 'Desant…' : 'Desar sessió'}
                 </button>
@@ -320,7 +320,7 @@ export default function Onboarding() {
         <button
           onClick={runInitialSync}
           disabled={!account?.activeTeamId}
-          className="mt-3 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-bg hover:opacity-90 disabled:opacity-40"
+          className="mt-3 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-background hover:opacity-90 disabled:opacity-40"
         >
           Sincronitzar ara
         </button>

@@ -87,7 +87,7 @@ export default function Dashboard() {
       <div className="rounded-2xl border border-border bg-surface p-8 text-center">
         <p className="text-lg font-semibold">Encara no tens cap equip seleccionat</p>
         <p className="mt-2 text-sm text-muted-foreground">Completa la configuració inicial per veure les teves recomanacions.</p>
-        <Link to="/onboarding" className="mt-4 inline-block rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-bg">
+        <Link to="/onboarding" className="mt-4 inline-block rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-background">
           Anar a la configuració
         </Link>
       </div>

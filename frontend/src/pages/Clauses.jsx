@@ -252,9 +252,8 @@ export default function Clauses() {
               {top.ownerTeamName || 'un rival'}
             </p>
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              <p className="text-3xl font-extrabold">{formatMoneyM(top.clauseValue)}</p>
-              <span className={`rounded-md px-2 py-1 text-sm font-semibold ${premiumClass(top.clausePremiumPct)} bg-current/10`}>
-                
+              <p className="num text-3xl font-extrabold">{formatMoneyM(top.clauseValue)}</p>
+              <span className={`num rounded-md px-2 py-1 text-sm font-semibold ${premiumClass(top.clausePremiumPct)} bg-current/10`}>
                 {formatPercent(top.clausePremiumPct * 100)} vs. valor de mercat
               </span>
             </div>

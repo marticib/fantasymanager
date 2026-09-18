@@ -104,7 +104,7 @@ export default function Settings() {
             <button
               onClick={disconnect}
               disabled={disconnecting}
-              className="rounded-lg bg-bear px-4 py-2 text-sm font-semibold text-bg hover:opacity-90 disabled:opacity-50"
+              className="rounded-lg bg-bear px-4 py-2 text-sm font-semibold text-background hover:opacity-90 disabled:opacity-50"
             >
               {disconnecting ? 'Desconnectant…' : 'Sí, desconnectar'}
             </button>
@@ -159,7 +159,7 @@ export default function Settings() {
       <button
         onClick={save}
         disabled={saving}
-        className="mt-6 rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-bg hover:opacity-90 disabled:opacity-50"
+        className="mt-6 rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-background hover:opacity-90 disabled:opacity-50"
       >
         {saving ? 'Desant…' : 'Desar configuració'}
       </button>

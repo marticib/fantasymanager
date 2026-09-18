@@ -92,9 +92,9 @@ const RAW_FIELD_LABEL = {
 
 function StatTile({ label, value, accent }) {
   return (
-    <div className={`rounded-2xl border border-border bg-surface p-4 border-l-2 ${ACCENT_BORDER_CLASS[accent] || 'border-l-border'}`}>
-      <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
-      <div className="mt-1 text-xl font-bold">{value}</div>
+    <div className={`panel p-4 border-l-2 ${ACCENT_BORDER_CLASS[accent] || 'border-l-border'}`}>
+      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{label}</p>
+      <div className="num mt-1 text-xl font-semibold">{value}</div>
     </div>
   )
 }
@@ -209,9 +209,9 @@ export default function PlayerDetail() {
         ← Jugadors
       </Link>
 
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-border bg-surface p-6">
+      <div className="panel mt-4 flex flex-wrap items-center justify-between gap-4 p-6">
         <div className="flex items-center gap-4">
-          <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted-foreground/15 text-lg font-bold text-muted-foreground">
+          <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border bg-surface-raised text-lg font-bold text-muted-foreground">
             {data.player.imageUrl ? (
               <img src={data.player.imageUrl} alt="" className="h-full w-full object-cover" />
             ) : (
@@ -219,7 +219,7 @@ export default function PlayerDetail() {
             )}
           </div>
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">{data.player.name}</h1>
+            <h1 className="text-3xl font-semibold tracking-tight">{data.player.name}</h1>
             <div className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
               <span>{data.player.club}</span>
               <span className="rounded-md border border-border px-1.5 py-0.5 text-xs font-semibold">
@@ -280,7 +280,7 @@ export default function PlayerDetail() {
 
       <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-[1fr_360px]">
         <div className="space-y-4">
-          <div className="rounded-2xl border border-border bg-surface p-5">
+          <div className="panel p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 className="font-semibold">Evolució del valor</h2>
               <div className="flex gap-1 rounded-lg border border-border p-0.5">
@@ -289,7 +289,7 @@ export default function PlayerDetail() {
                     key={r.key}
                     onClick={() => setRange(r.key)}
                     className={`rounded-md px-2.5 py-1 text-xs font-semibold ${
-                      range === r.key ? 'bg-primary text-bg' : 'text-muted-foreground hover:text-foreground'
+                      range === r.key ? 'bg-primary text-background' : 'text-muted-foreground hover:text-foreground'
                     }`}
                   >
                     {r.key}
@@ -335,7 +335,7 @@ export default function PlayerDetail() {
           </div>
 
           {data.weekPoints.length > 0 && (
-            <div className="rounded-2xl border border-border bg-surface p-5">
+            <div className="panel p-5">
               <h2 className="font-semibold">Punts per jornada</h2>
               <div className="mt-4 h-56">
                 <ResponsiveContainer width="100%" height="100%">
@@ -352,7 +352,7 @@ export default function PlayerDetail() {
           )}
 
           {data.externalTrend && (
-            <div className="rounded-2xl border border-border bg-surface p-5">
+            <div className="panel p-5">
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Tendència externa</h2>
                 <span className="text-xs text-muted-foreground" title="futbolfantasy.com — no és una font oficial de LaLiga">
@@ -369,7 +369,7 @@ export default function PlayerDetail() {
                 ].map(([label, value]) => (
                   <div key={label} className="rounded-xl border border-border p-3 text-center">
                     <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</p>
-                    <p className={`mt-1 font-bold ${value > 0 ? 'text-bull' : value < 0 ? 'text-bear' : 'text-muted-foreground'}`}>
+                    <p className={`num mt-1 font-bold ${value > 0 ? 'text-bull' : value < 0 ? 'text-bear' : 'text-muted-foreground'}`}>
                       {value != null ? formatPercent(value) : '—'}
                     </p>
                   </div>
@@ -380,8 +380,8 @@ export default function PlayerDetail() {
         </div>
 
         <div className="space-y-4">
-          <div className="rounded-2xl border border-border bg-surface p-5">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Què faria jo?</p>
+          <div className="panel p-5">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Què faria jo?</p>
             {decision ? (
               <>
                 <p className={`mt-2 text-3xl font-extrabold tracking-tight ${ACTION_TEXT_CLASS[color]}`}>{label}</p>
@@ -402,20 +402,20 @@ export default function PlayerDetail() {
                   <div className="mt-4 grid grid-cols-2 gap-2">
                     {typeof raw.recommendedBid === 'number' && (
                       <div className="rounded-xl bg-bull/10 p-3">
-                        <p className="text-[11px] font-semibold uppercase tracking-wide text-bull/80">Oferta recomanada</p>
-                        <p className="mt-1 text-lg font-bold text-bull">{formatMoneyM(raw.recommendedBid)}</p>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-bull/80">Oferta recomanada</p>
+                        <p className="num mt-1 text-lg font-bold text-bull">{formatMoneyM(raw.recommendedBid)}</p>
                       </div>
                     )}
                     <div className="rounded-xl border border-border p-3">
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">No superar (MaxBid)</p>
-                      <p className="mt-1 text-lg font-bold">{formatMoneyM(raw.maxBid)}</p>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">No superar (MaxBid)</p>
+                      <p className="num mt-1 text-lg font-bold">{formatMoneyM(raw.maxBid)}</p>
                     </div>
                     <div className="rounded-xl border border-border p-3">
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">ROI 14d</p>
-                      <p className="mt-1 text-lg font-bold">{formatPercent(raw.expectedROI14d * 100)}</p>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">ROI 14d</p>
+                      <p className="num mt-1 text-lg font-bold">{formatPercent(raw.expectedROI14d * 100)}</p>
                     </div>
                     <div className="rounded-xl border border-border p-3">
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Break-even</p>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Break-even</p>
                       <p className="mt-1 text-lg font-bold">{raw.breakEvenDays != null ? `${raw.breakEvenDays} dies` : '—'}</p>
                     </div>
                   </div>
@@ -424,19 +424,19 @@ export default function PlayerDetail() {
                 {decision.type === 'CLAUSE' && (
                   <div className="mt-4 grid grid-cols-2 gap-2">
                     <div className="rounded-xl bg-info/10 p-3">
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-info/80">Clàusula</p>
-                      <p className="mt-1 text-lg font-bold text-info">{formatMoneyM(raw.clauseValue)}</p>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-info/80">Clàusula</p>
+                      <p className="num mt-1 text-lg font-bold text-info">{formatMoneyM(raw.clauseValue)}</p>
                     </div>
                     <div className="rounded-xl border border-border p-3">
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Prima</p>
-                      <p className="mt-1 text-lg font-bold">{formatPercent(raw.clausePremiumPct * 100)}</p>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Prima</p>
+                      <p className="num mt-1 text-lg font-bold">{formatPercent(raw.clausePremiumPct * 100)}</p>
                     </div>
                     <div className="rounded-xl border border-border p-3">
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">ROI 14d</p>
-                      <p className="mt-1 text-lg font-bold">{formatPercent(raw.roi14d * 100)}</p>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">ROI 14d</p>
+                      <p className="num mt-1 text-lg font-bold">{formatPercent(raw.roi14d * 100)}</p>
                     </div>
                     <div className="rounded-xl border border-border p-3">
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Break-even</p>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Break-even</p>
                       <p className="mt-1 text-lg font-bold">{raw.breakEvenDays != null ? `${raw.breakEvenDays} dies` : '—'}</p>
                     </div>
                   </div>
@@ -445,17 +445,17 @@ export default function PlayerDetail() {
                 {decision.type === 'ROSTER' && decision.action === 'LOCK_CLAUSE' && raw.clauseTiming && (
                   <div className="mt-4 grid grid-cols-2 gap-2">
                     <div className="rounded-xl bg-info/10 p-3">
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-info/80">Cost</p>
-                      <p className="mt-1 text-lg font-bold text-info">{formatMoneyM(data.clauseValue)}</p>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-info/80">Cost</p>
+                      <p className="num mt-1 text-lg font-bold text-info">{formatMoneyM(data.clauseValue)}</p>
                     </div>
                     <div className="rounded-xl border border-border p-3">
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Moment</p>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Moment</p>
                       <p className="mt-1 text-lg font-bold">{raw.clauseTiming.recommendedExecution === 'NOW' ? 'Avui' : 'Últim dia segur'}</p>
                     </div>
                     {raw.clauseTiming.profitableTarget != null && (
                       <div className="rounded-xl border border-border p-3" title="No superar el valor projectat a 14 dies — recomanació pròpia, no un límit confirmat de LaLiga.">
-                        <p className="text-[11px] font-semibold uppercase tracking-wide text-bull/80">Rendible fins a</p>
-                        <p className="mt-1 text-lg font-bold text-bull">{formatMoneyM(raw.clauseTiming.profitableTarget)}</p>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-bull/80">Rendible fins a</p>
+                        <p className="num mt-1 text-lg font-bold text-bull">{formatMoneyM(raw.clauseTiming.profitableTarget)}</p>
                         <p className="mt-0.5 text-[10px] text-muted-foreground">
                           {raw.clauseTiming.profitableTargetCost > 0
                             ? `et costaria ${formatMoneyM(raw.clauseTiming.profitableTargetCost)}`
@@ -465,8 +465,8 @@ export default function PlayerDetail() {
                     )}
                     {raw.clauseTiming.antiTheftTarget != null && (
                       <div className="rounded-xl border border-border p-3" title="Prima a partir de la qual el risc de robatori és pràcticament nul — recomanació pròpia, no un límit confirmat de LaLiga.">
-                        <p className="text-[11px] font-semibold uppercase tracking-wide text-info/80">Anti-robatori des de</p>
-                        <p className="mt-1 text-lg font-bold text-info">{formatMoneyM(raw.clauseTiming.antiTheftTarget)}</p>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-info/80">Anti-robatori des de</p>
+                        <p className="num mt-1 text-lg font-bold text-info">{formatMoneyM(raw.clauseTiming.antiTheftTarget)}</p>
                         <p className="mt-0.5 text-[10px] text-muted-foreground">
                           {raw.clauseTiming.antiTheftTargetCost > 0
                             ? `et costaria ${formatMoneyM(raw.clauseTiming.antiTheftTargetCost)}`
@@ -480,13 +480,13 @@ export default function PlayerDetail() {
                 {decision.type === 'ROSTER' && decision.action === 'SELL' && (
                   <div className="mt-4 grid grid-cols-2 gap-2">
                     <div className="rounded-xl bg-bear/10 p-3">
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-bear/80">Motiu</p>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-bear/80">Motiu</p>
                       <p className="mt-1 text-sm font-bold text-bear">{raw.sellReasonCode || '—'}</p>
                     </div>
                     {raw.trade?.currentOffer != null && (
                       <div className="rounded-xl border border-border p-3">
-                        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Oferta actual</p>
-                        <p className="mt-1 text-lg font-bold">{formatMoneyM(raw.trade.currentOffer)}</p>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Oferta actual</p>
+                        <p className="num mt-1 text-lg font-bold">{formatMoneyM(raw.trade.currentOffer)}</p>
                       </div>
                     )}
                   </div>
@@ -496,7 +496,7 @@ export default function PlayerDetail() {
                   <div className="mt-4 grid grid-cols-2 gap-3">
                     {decision.favors.length > 0 && (
                       <div>
-                        <p className="text-xs font-semibold uppercase tracking-wide text-bull">A favor</p>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-bull">A favor</p>
                         <ul className="mt-1.5 space-y-1.5 text-sm">
                           {decision.favors.map((f, i) => (
                             <li key={i} className="flex items-start gap-1.5">
@@ -509,7 +509,7 @@ export default function PlayerDetail() {
                     )}
                     {decision.risks.length > 0 && (
                       <div>
-                        <p className="text-xs font-semibold uppercase tracking-wide text-warn">Riscos</p>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-warn">Riscos</p>
                         <ul className="mt-1.5 space-y-1.5 text-sm text-muted-foreground">
                           {decision.risks.map((r, i) => (
                             <li key={i} className="flex items-start gap-1.5">
@@ -532,36 +532,36 @@ export default function PlayerDetail() {
             )}
           </div>
 
-          <div className="rounded-2xl border border-border bg-surface p-5">
+          <div className="panel p-5">
             <h2 className="font-semibold">Informació de la lliga</h2>
             <div className="mt-3 grid grid-cols-2 gap-4">
               <div>
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Propietari</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Propietari</p>
                 <p className="mt-1 font-semibold">{data.owner ? (data.owner.isMine ? 'Tu' : data.owner.name) : 'Lliure'}</p>
               </div>
               <div>
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Valor</p>
-                <p className="mt-1 font-semibold">{formatMoneyM(data.player.marketValue)}</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Valor</p>
+                <p className="num mt-1 font-semibold">{formatMoneyM(data.player.marketValue)}</p>
               </div>
               {data.context !== 'ON_MARKET' && data.clauseValue != null && (
                 <>
                   <div>
-                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Clàusula</p>
-                    <p className="mt-1 font-semibold text-info">{formatMoneyM(data.clauseValue)}</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Clàusula</p>
+                    <p className="num mt-1 font-semibold text-info">{formatMoneyM(data.clauseValue)}</p>
                   </div>
                   <div>
-                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Prima clàusula</p>
-                    <p className="mt-1 font-semibold text-info">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Prima clàusula</p>
+                    <p className="num mt-1 font-semibold text-info">
                       {data.clausePremiumPct != null ? formatPercent(data.clausePremiumPct * 100) : '—'}
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Protecció</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Protecció</p>
                     <p className="mt-1 font-semibold">{data.isClauseLocked ? 'Blindada' : 'Desbloquejada'}</p>
                   </div>
                   {data.isClauseLocked && (
                     <div>
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Desbloqueig</p>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Desbloqueig</p>
                       <p className="mt-1 font-semibold">{formatDate(data.clauseLockedUntil)}</p>
                     </div>
                   )}
@@ -569,7 +569,7 @@ export default function PlayerDetail() {
               )}
               {data.context === 'ON_MARKET' && data.listing?.expiresAt && (
                 <div>
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Mercat tanca</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Mercat tanca</p>
                   <p className="mt-1 font-semibold">{formatDate(data.listing.expiresAt)}</p>
                 </div>
               )}
@@ -657,7 +657,7 @@ export default function PlayerDetail() {
           </div>
 
           {data.alternatives.length > 0 && (
-            <div className="rounded-2xl border border-border bg-surface p-5">
+            <div className="panel p-5">
               <h2 className="font-semibold">Alternatives similars</h2>
               <p className="text-xs text-muted-foreground">Mateixa posició, millor economia de compra</p>
               <div className="mt-3 divide-y divide-border">
@@ -665,10 +665,10 @@ export default function PlayerDetail() {
                   <Link
                     key={alt.id}
                     to={`/players/${alt.id}`}
-                    className="flex items-center justify-between gap-2 py-2.5 text-sm hover:text-primary"
+                    className="-mx-2 flex items-center justify-between gap-2 rounded-lg px-2 py-2.5 text-sm transition-colors hover:bg-surface-raised hover:text-primary"
                   >
                     <span className="truncate font-medium">{alt.name}</span>
-                    <span className="flex shrink-0 items-center gap-2 text-muted-foreground">
+                    <span className="num flex shrink-0 items-center gap-2 text-muted-foreground">
                       {formatMoneyM(alt.marketValue)} · {alt.buyEconomicScore} · ROI {formatPercent(alt.roi14d * 100)}
                       <ArrowRightIcon className="h-3.5 w-3.5" />
                     </span>

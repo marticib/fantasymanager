@@ -340,7 +340,7 @@ export default function History() {
                     key={r.key}
                     onClick={() => setRange(r.key)}
                     className={`rounded-md px-2.5 py-1 text-xs font-semibold ${
-                      range === r.key ? 'bg-primary text-bg' : 'text-muted-foreground hover:text-foreground'
+                      range === r.key ? 'bg-primary text-background' : 'text-muted-foreground hover:text-foreground'
                     }`}
                   >
                     {r.label}
