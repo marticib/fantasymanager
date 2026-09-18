@@ -16,7 +16,6 @@ import {
   BarChart3,
   Settings as SettingsIcon,
   RefreshCw,
-  Bell,
   Calendar,
   ChevronDown,
   Menu,
@@ -80,17 +79,23 @@ function LeagueSwitcher({ leagueName }) {
   }
 
   return (
-    <div className="relative" ref={ref}>
+    // flex + min-w-0 here (not just on the button) is what actually makes
+    // the truncated span below clip at 80px instead of silently overflowing
+    // this wrapper — confirmed live: this div is a plain position:relative
+    // box, not a flex container, so without `flex` here the button inside
+    // was never a flex item of it and ignored its shrunk width entirely,
+    // overflowing on top of the sync button next to it and hiding it.
+    <div className="relative flex min-w-0" ref={ref}>
       <button
         onClick={toggle}
-        className="flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-1.5 text-sm font-medium hover:border-primary/50"
+        className="flex min-w-0 items-center gap-2 rounded-lg border border-border bg-surface px-3 py-1.5 text-sm font-medium hover:border-primary/50"
       >
-        <Trophy className="h-4 w-4 text-muted-foreground" />
-        <span className="max-w-40 truncate">{leagueName || 'Sense lliga'}</span>
-        <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+        <Trophy className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <span className="max-w-20 truncate sm:max-w-36">{leagueName || 'Sense lliga'}</span>
+        <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
       </button>
       {open && (
-        <div className="panel elevated absolute left-0 top-full z-20 mt-2 w-64 p-2">
+        <div className="panel elevated absolute left-0 top-full z-20 mt-2 w-60 p-2">
           {!leagues && <p className="px-2 py-2 text-xs text-muted-foreground">Carregant…</p>}
           {leagues?.map((league) => (
             <button
@@ -190,7 +195,7 @@ function MobileMoreMenu() {
     }`
 
   return (
-    <div className="relative" ref={ref}>
+    <div className="relative flex flex-1" ref={ref}>
       {open && (
         <div className="panel elevated absolute bottom-full right-0 z-30 mb-2 w-56 p-2">
           {moreItems.map((item) => (
@@ -219,7 +224,12 @@ function MobileBottomNav() {
     `flex flex-1 flex-col items-center gap-1 py-2 text-[11px] font-medium ${isActive ? 'text-primary' : 'text-muted-foreground'}`
 
   return (
-    <nav className="panel elevated fixed inset-x-0 bottom-0 z-40 flex rounded-none border-x-0 border-b-0 md:hidden">
+    // Deliberately not the `panel` utility here: it hardcodes radius-xl
+    // corners, which would clip this bar's content against the screen edge
+    // (confirmed live — the "Més" icon was rendering cut off bottom-right).
+    // A fixed, edge-to-edge bar needs square corners, composed directly
+    // instead of fighting panel's radius via a rounded-none override.
+    <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] elevated md:hidden">
       {MOBILE_TAB_ITEMS.map((item) => (
         <NavLink key={item.to} to={item.to} end={item.end} className={tabClass}>
           <item.icon className="h-5 w-5" />
@@ -261,14 +271,17 @@ export default function Layout() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-surface px-4 py-3 sm:px-6 lg:px-10">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2.5 pr-1">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary">
-              <LogoIcon className="h-5 w-5" />
-            </span>
-            <p className="hidden text-sm font-bold leading-tight tracking-tight sm:block">Fantasy Assistant</p>
-          </div>
+      {/* flex-nowrap + aggressive truncation/hiding below sm: this row must
+          never wrap on mobile (confirmed live it used to spill onto a 2nd
+          line) — the bottom nav already covers primary navigation there, so
+          the mobile header only keeps the essentials: logo, league, sync,
+          last-synced, avatar. */}
+      <header className="flex flex-nowrap items-center justify-between gap-2 border-b border-border bg-surface px-3 py-3 sm:gap-3 sm:px-6 lg:px-10">
+        <div className="flex min-w-0 flex-nowrap items-center gap-2 sm:gap-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary">
+            <LogoIcon className="h-5 w-5" />
+          </span>
+          <p className="hidden text-sm font-bold leading-tight tracking-tight sm:block">Fantasy Assistant</p>
           <div className="hidden md:block">
             <NavMenu />
           </div>
@@ -279,25 +292,23 @@ export default function Layout() {
               Jornada <span className="num font-semibold text-foreground">{header.currentMatchday}</span>
             </span>
           )}
-          <span className="hidden items-center gap-1.5 text-xs text-muted-foreground sm:flex">
-            <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-            {header?.lastSyncedAt ? `Sincronitzat ${formatRelativeTime(header.lastSyncedAt)}` : 'Encara no sincronitzat'}
-          </span>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex shrink-0 flex-nowrap items-center gap-2 sm:gap-3">
           <button
             onClick={triggerSync}
             disabled={syncing}
-            className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm font-semibold hover:border-primary/50 disabled:opacity-50"
+            className="flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-sm font-semibold hover:border-primary/50 disabled:opacity-50 sm:px-3"
           >
             <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
             <span className="hidden sm:inline">{syncing ? 'Sincronitzant…' : 'Sincronitzar'}</span>
           </button>
-          <button className="rounded-lg border border-border p-2 text-muted-foreground hover:border-primary/50">
-            <Bell className="h-4 w-4" />
-          </button>
-          <div className="group relative">
+          <span className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground">
+            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+            <span className="hidden sm:inline">{header?.lastSyncedAt ? `Sincronitzat ${formatRelativeTime(header.lastSyncedAt)}` : 'Encara no sincronitzat'}</span>
+            <span className="sm:hidden">{header?.lastSyncedAt ? formatRelativeTime(header.lastSyncedAt) : '—'}</span>
+          </span>
+          <div className="group relative shrink-0">
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary">
               {initials(user?.name)}
             </div>
