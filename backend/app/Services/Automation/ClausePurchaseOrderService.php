@@ -104,14 +104,27 @@ class ClausePurchaseOrderService
         $order->update(['status' => FantasyClausePurchaseOrder::STATUS_CANCELLED]);
     }
 
+    /**
+     * Accepting a risen price re-arms the order at the new clause value —
+     * it does not blindly pay: the clause may still be locked (rivals raise
+     * clauses precisely during the lock), in which case the order simply
+     * goes back to PENDING at the new baseline and pays on unlock, unless it
+     * rises again (which asks again).
+     */
     public function confirmAndExecute(FantasyClausePurchaseOrder $order): void
     {
         if ($order->status !== FantasyClausePurchaseOrder::STATUS_NEEDS_CONFIRMATION || $order->pending_confirmation_clause_value === null) {
             throw new InvalidArgumentException('Only an order awaiting confirmation can be confirmed.');
         }
 
+        $order->update([
+            'clause_value_at_order' => $order->pending_confirmation_clause_value,
+            'pending_confirmation_clause_value' => null,
+            'status' => FantasyClausePurchaseOrder::STATUS_PENDING,
+        ]);
+
         try {
-            $this->execute($order, $order->pending_confirmation_clause_value);
+            $this->processOrder($order);
         } catch (Throwable $e) {
             $this->markFailed($order, $e);
         }
@@ -155,12 +168,23 @@ class ClausePurchaseOrderService
         $order->update(['last_checked_at' => now()]);
 
         $isLocked = $entry->clauseLockedUntil !== null && now()->lt($entry->clauseLockedUntil);
+        $currentClauseValue = (int) ($entry->player->clauseValue ?? 0);
+
+        // A rise is flagged as soon as it happens, locked or not — rivals
+        // typically raise a clause *during* its lock, so waiting for the
+        // unlock to compare prices meant the user was never asked.
+        if ($currentClauseValue > $order->clause_value_at_order) {
+            $order->update([
+                'status' => FantasyClausePurchaseOrder::STATUS_NEEDS_CONFIRMATION,
+                'pending_confirmation_clause_value' => $currentClauseValue,
+            ]);
+
+            return;
+        }
 
         if ($isLocked) {
             return;
         }
-
-        $currentClauseValue = (int) ($entry->player->clauseValue ?? 0);
 
         if ($currentClauseValue <= 0) {
             $order->update(['status' => FantasyClausePurchaseOrder::STATUS_FAILED, 'error_message' => 'Current clause value unavailable.']);
@@ -168,16 +192,7 @@ class ClausePurchaseOrderService
             return;
         }
 
-        if ($currentClauseValue <= $order->clause_value_at_order) {
-            $this->execute($order, $currentClauseValue);
-
-            return;
-        }
-
-        $order->update([
-            'status' => FantasyClausePurchaseOrder::STATUS_NEEDS_CONFIRMATION,
-            'pending_confirmation_clause_value' => $currentClauseValue,
-        ]);
+        $this->execute($order, $currentClauseValue);
     }
 
     private function execute(FantasyClausePurchaseOrder $order, int $clauseValue): void

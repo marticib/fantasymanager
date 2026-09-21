@@ -508,7 +508,7 @@ class PlayerDecisionEngine
      * which is exactly the honest "no current offer" the Trade Score's
      * sell-premium component is built to handle, never a fabricated 0.
      */
-    private function currentOffer(FantasyPlayer $player, FantasyTeam $team): ?float
+    public function currentOffer(FantasyPlayer $player, FantasyTeam $team): ?float
     {
         $offer = FantasyOffer::where('fantasy_player_id', $player->id)
             ->where('receiving_team_id', $team->id)

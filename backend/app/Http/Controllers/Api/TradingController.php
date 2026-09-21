@@ -3,70 +3,102 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\FantasyMarketPlayer;
+use App\Models\FantasyAccount;
 use App\Services\Recommendation\FantasySettingsService;
-use App\Services\Recommendation\TrendAnalysisService;
+use App\Services\Trading\BuildXiOptimizer;
+use App\Services\Trading\BuildXiService;
+use App\Services\Trading\MakeMoneyService;
+use App\Services\Trading\TradingFreshnessService;
+use Closure;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 
+/**
+ * The Trading screen's two tabs. Thin on purpose: every calculation lives in
+ * App\Services\Trading (which in turn reuses the market/clause economic
+ * engines) — this only validates the query, caches, and attaches the
+ * data-freshness picture the UI must show next to any recommendation.
+ */
 class TradingController extends Controller
 {
-    /**
-     * Naive linear extrapolation of the current daily value trend over the
-     * configured trading horizon. This is intentionally simple (no ML, no
-     * hidden model) so the number is always traceable back to real
-     * fantasy_player_snapshots — a wrong-but-honest projection beats a
-     * black-box one here.
-     */
-    public function opportunities(Request $request, TrendAnalysisService $trendService, FantasySettingsService $settings)
+    public function __construct(
+        private readonly TradingFreshnessService $freshness,
+        private readonly FantasySettingsService $settings,
+    ) {}
+
+    public function buildXi(Request $request, BuildXiService $service): JsonResponse
     {
         $account = $this->currentAccount($request);
-        $league = $account->activeLeague;
+        $strategy = $request->query('strategy', 'balanced');
 
-        if (! $league) {
-            return response()->json(['data' => [], 'message' => 'No active league selected yet.']);
+        if (! in_array($strategy, BuildXiOptimizer::STRATEGIES, true)) {
+            return response()->json(['message' => 'Estratègia desconeguda.', 'allowed' => BuildXiOptimizer::STRATEGIES], 422);
+        }
+        if (($horizon = $this->horizon($request)) === null) {
+            return $this->invalidHorizon();
         }
 
-        $rules = $settings->rules($account);
-        $horizonDays = (int) $rules['trading_horizon_days'];
-        $minProfit = (int) $rules['trading_minimum_expected_profit'];
+        return $this->respond($account, 'build-xi', ['strategy' => $strategy, 'horizon' => $horizon], fn () => $service->build($account, $strategy, $horizon));
+    }
 
-        $listings = FantasyMarketPlayer::query()
-            ->where('fantasy_league_id', $league->id)
-            ->where('is_on_market', true)
-            ->with('player')
-            ->get();
+    public function makeMoney(Request $request, MakeMoneyService $service): JsonResponse
+    {
+        $account = $this->currentAccount($request);
 
-        $opportunities = $listings
-            ->filter(fn ($listing) => $listing->player && $listing->market_value)
-            ->map(function (FantasyMarketPlayer $listing) use ($trendService, $horizonDays) {
-                $trend = $trendService->analyze($listing->player);
+        if (($horizon = $this->horizon($request)) === null) {
+            return $this->invalidHorizon();
+        }
+        $respectReserve = $request->boolean('respect_reserve', true);
 
-                if (! $trend->hasEnoughData() || $trend->change24h === null || $trend->change24h <= 0) {
-                    return null;
-                }
+        return $this->respond($account, 'make-money', ['horizon' => $horizon, 'reserve' => $respectReserve], fn () => $service->build($account, $horizon, $respectReserve));
+    }
 
-                $buyPrice = (int) round($listing->market_value * 1.03);
-                $projectedValue = $listing->market_value + ($trend->change24h * $horizonDays);
-                $estimatedProfit = $projectedValue - $buyPrice;
+    private function horizon(Request $request): ?int
+    {
+        $horizon = (int) $request->query('horizon', config('fantasy.trading.default_horizon_days'));
 
-                return [
-                    'player' => [
-                        'id' => $listing->player->id,
-                        'name' => $listing->player->name,
-                        'position' => $listing->player->position,
-                    ],
-                    'marketValue' => $listing->market_value,
-                    'buyPrice' => $buyPrice,
-                    'dailyTrend' => $trend->change24h,
-                    'horizonDays' => $horizonDays,
-                    'projectedValue' => (int) round($projectedValue),
-                    'estimatedProfit' => (int) round($estimatedProfit),
-                ];
-            })
-            ->filter(fn ($o) => $o && $o['estimatedProfit'] >= $minProfit)
-            ->sortByDesc('estimatedProfit')
-            ->values();
+        return in_array($horizon, config('fantasy.trading.horizons'), true) ? $horizon : null;
+    }
 
-        return response()->json(['data' => $opportunities]);
+    private function invalidHorizon(): JsonResponse
+    {
+        return response()->json(['message' => 'Horitzó no vàlid.', 'allowed' => config('fantasy.trading.horizons')], 422);
+    }
+
+    /**
+     * The computed plan is cached briefly, keyed on everything that can
+     * change it (each source's last-sync stamp, cash, the account's rules) so
+     * a fresh sync or a settings edit is never masked; the freshness block is
+     * always recomputed so its ages stay true.
+     *
+     * @param  array<string, mixed>  $params
+     */
+    private function respond(FantasyAccount $account, string $name, array $params, Closure $compute): JsonResponse
+    {
+        $freshness = $this->freshness->assess($account);
+        $ttl = (int) config('fantasy.trading.cache_seconds');
+
+        $key = 'trading:'.$name.':'.md5(json_encode([
+            $account->id,
+            $account->active_league_id,
+            $account->active_team_id,
+            $account->activeTeam?->money,
+            array_column($freshness['sources'], 'lastUpdatedAt'),
+            $this->settings->rules($account),
+            $params,
+        ]));
+
+        $data = $ttl > 0 ? Cache::remember($key, $ttl, $compute) : $compute();
+
+        return response()->json([
+            'data' => $data,
+            'meta' => [
+                'freshness' => $freshness,
+                'generatedAt' => now()->toIso8601String(),
+                'horizons' => config('fantasy.trading.horizons'),
+                'defaultHorizon' => (int) config('fantasy.trading.default_horizon_days'),
+            ],
+        ]);
     }
 }

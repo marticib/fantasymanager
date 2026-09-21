@@ -272,7 +272,9 @@ class ClausePurchaseOrderServiceTest extends TestCase
         [$account, , , $player] = $this->fixture();
 
         Http::fake([
-            '*/leagues/*/teams/*' => Http::response($this->rosterResponse(10_000_000, now()->addDay()->toIso8601String()), 200),
+            '*/leagues/*/teams/*' => Http::sequence()
+                ->push($this->rosterResponse(10_000_000, now()->addDay()->toIso8601String())) // createOrder(): locked, unchanged
+                ->push($this->rosterResponse(14_000_000, null)), // confirm: rebaselined at 14M, now unlocked
             '*/teams/*/money*' => Http::response(['money' => 99_000_000], 200),
             '*/league/*/buyout/*/pay*' => Http::response(['data' => ['success' => true]], 200),
             '*' => Http::response(['data' => []], 200),
@@ -298,7 +300,9 @@ class ClausePurchaseOrderServiceTest extends TestCase
         [$account, , , $player] = $this->fixture();
 
         Http::fake([
-            '*/leagues/*/teams/*' => Http::response($this->rosterResponse(10_000_000, now()->addDay()->toIso8601String()), 200),
+            '*/leagues/*/teams/*' => Http::sequence()
+                ->push($this->rosterResponse(10_000_000, now()->addDay()->toIso8601String())) // createOrder(): locked, unchanged
+                ->push($this->rosterResponse(14_000_000, null)), // confirm: rebaselined at 14M, now unlocked
             '*/teams/*/money*' => Http::response(['money' => 4_000_000], 200),
             '*' => Http::response(['data' => []], 200),
         ]);
@@ -323,7 +327,9 @@ class ClausePurchaseOrderServiceTest extends TestCase
         [$account, , , $player] = $this->fixture();
 
         Http::fake([
-            '*/leagues/*/teams/*' => Http::response($this->rosterResponse(10_000_000, now()->addDay()->toIso8601String()), 200),
+            '*/leagues/*/teams/*' => Http::sequence()
+                ->push($this->rosterResponse(10_000_000, now()->addDay()->toIso8601String())) // createOrder(): locked, unchanged
+                ->push($this->rosterResponse(14_000_000, null)), // confirm: rebaselined at 14M, now unlocked
             '*/teams/*/money*' => Http::response(['money' => 99_000_000], 200),
             '*/league/*/buyout/*/pay*' => Http::response(['message' => 'Fons insuficients'], 400),
             '*' => Http::response(['data' => []], 200),
@@ -340,6 +346,51 @@ class ClausePurchaseOrderServiceTest extends TestCase
         $fresh = $order->fresh();
         $this->assertSame(FantasyClausePurchaseOrder::STATUS_FAILED, $fresh->status);
         $this->assertSame('Fons insuficients', $fresh->error_message);
+    }
+
+    /** The real production case: a rival raises the clause while it is still locked — the user must be asked right away, not at unlock. */
+    public function test_a_rise_while_still_locked_asks_for_confirmation_immediately(): void
+    {
+        [$account, , , $player] = $this->fixture();
+
+        Http::fake([
+            '*/leagues/*/teams/*' => Http::sequence()
+                ->push($this->rosterResponse(10_000_000, now()->addDays(3)->toIso8601String()))
+                ->push($this->rosterResponse(13_000_000, now()->addDays(3)->toIso8601String())),
+            '*' => Http::response(['data' => []], 200),
+        ]);
+
+        $order = app(ClausePurchaseOrderService::class)->createOrder($account, $player);
+        app(ClausePurchaseOrderService::class)->processPendingOrders();
+
+        Http::assertNotSent(fn ($request) => str_contains($request->url(), '/buyout/'));
+        $fresh = $order->fresh();
+        $this->assertSame(FantasyClausePurchaseOrder::STATUS_NEEDS_CONFIRMATION, $fresh->status);
+        $this->assertSame(13_000_000, $fresh->pending_confirmation_clause_value);
+    }
+
+    /** Confirming while the clause is still locked re-arms the order at the new price; it must not try to pay yet. */
+    public function test_confirming_while_still_locked_rearms_the_order_without_paying(): void
+    {
+        [$account, , , $player] = $this->fixture();
+
+        Http::fake([
+            '*/leagues/*/teams/*' => Http::sequence()
+                ->push($this->rosterResponse(10_000_000, now()->addDays(3)->toIso8601String()))
+                ->push($this->rosterResponse(13_000_000, now()->addDays(3)->toIso8601String())),
+            '*' => Http::response(['data' => []], 200),
+        ]);
+
+        $order = app(ClausePurchaseOrderService::class)->createOrder($account, $player);
+        $order->update(['status' => FantasyClausePurchaseOrder::STATUS_NEEDS_CONFIRMATION, 'pending_confirmation_clause_value' => 13_000_000]);
+
+        app(ClausePurchaseOrderService::class)->confirmAndExecute($order);
+
+        Http::assertNotSent(fn ($request) => str_contains($request->url(), '/buyout/'));
+        $fresh = $order->fresh();
+        $this->assertSame(FantasyClausePurchaseOrder::STATUS_PENDING, $fresh->status);
+        $this->assertSame(13_000_000, $fresh->clause_value_at_order);
+        $this->assertNull($fresh->pending_confirmation_clause_value);
     }
 
     public function test_player_no_longer_on_the_target_team_fails_the_order(): void

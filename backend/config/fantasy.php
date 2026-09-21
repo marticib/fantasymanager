@@ -427,4 +427,89 @@ return [
         // OPORTUNITATS instead — the data quality gate from section 8.
         'min_confidence_for_priority' => 40,
     ],
+    /*
+    |--------------------------------------------------------------------------
+    | Trading — App\Services\Trading\*
+    |--------------------------------------------------------------------------
+    |
+    | The economic-strategy screen (Construir onze / Guanyar diners). It owns
+    | no projection maths: every projection, profit, ROI and MaxBid comes
+    | from MarketBuyAnalysisService / ClauseEconomicAnalysisService (which in
+    | turn share clause_analysis.trend_weights/decay_bands). What lives here is
+    | only what is genuinely new to this screen: which horizons the UI offers,
+    | formation shapes, data-quality/freshness thresholds and optimizer grids.
+    |
+    */
+    'trading' => [
+        // Must be a subset of {3, 7, 14} — the horizons the two analysis
+        // services project to. Adding another one means extending those
+        // services first, never duplicating their algorithm here.
+        'horizons' => [3, 7, 14],
+        'default_horizon_days' => (int) env('FANTASY_TRADING_HORIZON', 14),
+
+        // The API response is cached this long, keyed on the account, the
+        // request and every source's last-sync stamp (so a new sync busts it).
+        'cache_seconds' => (int) env('FANTASY_TRADING_CACHE_SECONDS', 60),
+
+        // ASSUMPTION: the project holds no formation rules (TeamController
+        // hardcodes 1-4-4-2). These are the shapes LaLiga Fantasy is commonly
+        // documented to accept; edit here if the league allows a different set.
+        // Positions use the app's own codes (GK/DF/MF/FW).
+        'formations' => [
+            '4-4-2' => ['GK' => 1, 'DF' => 4, 'MF' => 4, 'FW' => 2],
+            '4-3-3' => ['GK' => 1, 'DF' => 4, 'MF' => 3, 'FW' => 3],
+            '4-5-1' => ['GK' => 1, 'DF' => 4, 'MF' => 5, 'FW' => 1],
+            '3-4-3' => ['GK' => 1, 'DF' => 3, 'MF' => 4, 'FW' => 3],
+            '3-5-2' => ['GK' => 1, 'DF' => 3, 'MF' => 5, 'FW' => 2],
+            '5-3-2' => ['GK' => 1, 'DF' => 5, 'MF' => 3, 'FW' => 2],
+            '5-4-1' => ['GK' => 1, 'DF' => 5, 'MF' => 4, 'FW' => 1],
+        ],
+
+        // Optimizer money grid (euros). Costs round UP and sale proceeds round
+        // DOWN to it, so a plan is never over budget; the exact figures are
+        // what get reported. Smaller = finer but slower.
+        'capital_step' => [
+            'build_xi' => 100_000,
+            'make_money' => 50_000,
+        ],
+
+        // futbolfantasy's value vs LaLiga's market value for the same player:
+        // above `warn` a warning is attached and confidence drops; above `max`
+        // the match is treated as wrong and the player is excluded.
+        'value_divergence' => ['warn' => 0.10, 'max' => 0.30],
+
+        // A source older than this many minutes raises a freshness warning.
+        'staleness_minutes' => [
+            'league' => 120,
+            'market' => 60,
+            'clauses' => 360,
+            'external' => 360,
+        ],
+
+        // Confidence (0-100) = weighted mean of these components. Sum to 1.0.
+        'confidence_weights' => [
+            'match' => 0.25,
+            'windows' => 0.25,
+            'freshness' => 0.20,
+            'cost_certainty' => 0.15,
+            'value_consistency' => 0.15,
+        ],
+        // PlayerNameMatcher's match_confidence -> match quality points.
+        'match_quality' => ['exact' => 100, 'club_disambiguated' => 85, 'suffix' => 70],
+        // How certain the *price* is: a clause is exact, a recommended bid is
+        // an estimate (better when this league's own auction history backs it),
+        // a real pending offer is exact, an estimated sale is not.
+        'cost_certainty' => [
+            'owned' => 100,
+            'clause' => 100,
+            'market_league' => 80,
+            'market_fallback' => 50,
+            'sale_offer' => 100,
+            'sale_estimate' => 50,
+        ],
+        'confidence_bands' => ['high' => 70, 'medium' => 40],
+        // A would-be acquisition below this confidence is listed as excluded
+        // (LOW_CONFIDENCE) rather than recommended.
+        'min_confidence_to_recommend' => 40,
+    ],
 ];

@@ -73,6 +73,29 @@ class PlayerValueTrendCalculator
     }
 
     /**
+     * Values as of 1/3/7 days ago straight from futbolfantasy, never mixed
+     * with our own snapshots — for screens where FF is the declared source of
+     * economic history (Trading). Same plausibility guard as
+     * historicalValues(), measured against FF's own current value so a
+     * false name-match can't feed a compound growth rate. A window FF doesn't
+     * have (or that fails the guard) is null, never 0.
+     *
+     * @return array{0: ?float, 1: ?float, 2: ?float} value 1d/3d/7d ago
+     */
+    public function externalHistoricalValues(FantasyExternalTrend $externalTrend, float $currentValue): array
+    {
+        $plausible = function (?int $value) use ($currentValue): ?float {
+            if ($value === null || $value <= 0) {
+                return null;
+            }
+
+            return $this->isPlausible($currentValue, (float) $value) ? (float) $value : null;
+        };
+
+        return [$plausible($externalTrend->value_1d), $plausible($externalTrend->value_3d), $plausible($externalTrend->value_7d)];
+    }
+
+    /**
      * (currentValue / valueNDaysAgo)^(1/n) - 1 — the constant daily rate
      * that, compounded for n days, reproduces the observed change. Using
      * this instead of a simple %/n keeps 1d/3d/7d rates on the same footing

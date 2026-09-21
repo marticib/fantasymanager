@@ -291,4 +291,18 @@ class MarketBuyAnalysisServiceTest extends TestCase
 
         $this->assertLessThan($result->maxBid, $stricter->maxBid);
     }
+
+    /** The winning-bid premium is measured over LaLiga's value when the caller feeds a different economic value. */
+    public function test_the_auction_reference_value_overrides_the_base_of_the_estimated_winning_bid(): void
+    {
+        $args = ['currentMarketValue' => 11_000_000, 'acquisitionPrice' => 10_000_000, 'value1DayAgo' => 10_000_000, 'value3DaysAgo' => 10_000_000, 'value7DaysAgo' => 10_000_000, 'bidCount' => null, 'expectedWinningPremium' => 0.05, 'auctionHistorySource' => 'league'];
+
+        $default = $this->service()->analyze(...$args);
+        $withReference = $this->service()->analyze(...$args, auctionReferenceValue: 10_000_000);
+
+        $this->assertEqualsWithDelta(11_550_000, $default->estimatedWinningBid, 0.5, 'unchanged default behaviour');
+        $this->assertEqualsWithDelta(10_500_000, $withReference->estimatedWinningBid, 0.5);
+        $this->assertSame($default->projectedValue14d, $withReference->projectedValue14d, 'the projection is untouched');
+        $this->assertSame($default->maxBid, $withReference->maxBid, 'MaxBid is untouched');
+    }
 }

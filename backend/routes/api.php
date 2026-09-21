@@ -57,7 +57,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/recommendations/today', [RecommendationController::class, 'today']);
 
     // Trading & clauses (scaffolded now, fleshed out post-MVP)
-    Route::get('/trading/opportunities', [TradingController::class, 'opportunities']);
+    Route::get('/trading/build-xi', [TradingController::class, 'buildXi']);
+    Route::get('/trading/make-money', [TradingController::class, 'makeMoney']);
     Route::get('/clauses/opportunities', [ClauseController::class, 'opportunities']);
 
     Route::get('/clause-orders', [ClausePurchaseOrderController::class, 'index']);

@@ -81,6 +81,7 @@ class MarketBuyAnalysisService
         ?int $bidCount,
         float $expectedWinningPremium,
         string $auctionHistorySource,
+        ?float $auctionReferenceValue = null,
     ): MarketBuyAnalysis {
         $growth1d = $this->growthCalculator->compoundGrowthRate($currentMarketValue, $value1DayAgo, 1);
         $growth3d = $this->growthCalculator->compoundGrowthRate($currentMarketValue, $value3DaysAgo, 3);
@@ -109,7 +110,10 @@ class MarketBuyAnalysisService
         $score = $this->buyEconomicScore($roi14d, $breakEvenDays);
 
         $maxBid = $projectedValue14d / (1 + $this->requiredROI);
-        $estimatedWinningBid = $currentMarketValue * (1 + $expectedWinningPremium);
+        // The league's winning premium is measured over LaLiga's own market
+        // value, so a caller that feeds a different economic value (e.g. the
+        // Trading screen's futbolfantasy value) passes LaLiga's as the reference.
+        $estimatedWinningBid = ($auctionReferenceValue ?? $currentMarketValue) * (1 + $expectedWinningPremium);
         $recommendedBid = $estimatedWinningBid <= $maxBid ? $estimatedWinningBid : 'DO_NOT_CHASE';
 
         $dataQuality = $this->growthCalculator->dataQuality($growth1d, $growth3d, $growth7d);

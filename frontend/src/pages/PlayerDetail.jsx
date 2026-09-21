@@ -609,14 +609,14 @@ export default function PlayerDetail() {
                       La clàusula ha pujat a {formatMoneyM(data.clausePurchaseOrder.pendingConfirmationClauseValue)} (abans{' '}
                       {formatMoneyM(data.clausePurchaseOrder.clauseValueAtOrder)})
                     </p>
-                    <p className="mt-1 text-xs text-muted-foreground">Cal confirmar per comprar-la al preu nou.</p>
+                    <p className="mt-1 text-xs text-muted-foreground">Accepta el preu nou perquè l'ordre continuï activa (es pagarà en desbloquejar-se, si no torna a pujar).</p>
                     <div className="mt-2 flex gap-2">
                       <button
                         onClick={() => confirmClauseOrder(data.clausePurchaseOrder.id)}
                         disabled={orderBusy}
                         className="rounded-lg bg-bull/20 px-3 py-1.5 text-xs font-semibold text-bull hover:bg-bull/30 disabled:opacity-50"
                       >
-                        Confirmar compra
+                        Acceptar nou preu
                       </button>
                       <button
                         onClick={() => cancelClauseOrder(data.clausePurchaseOrder.id)}
