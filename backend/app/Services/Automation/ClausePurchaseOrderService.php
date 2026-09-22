@@ -2,6 +2,7 @@
 
 namespace App\Services\Automation;
 
+use App\Jobs\ProcessClauseOrderJob;
 use App\Models\FantasyAccount;
 use App\Models\FantasyClausePurchaseOrder;
 use App\Models\FantasyPlayer;
@@ -9,6 +10,8 @@ use App\Models\FantasyTeamPlayer;
 use App\Services\FantasyApi\Exceptions\FantasyApiException;
 use App\Services\FantasyApi\FantasyClauseService;
 use App\Services\FantasyApi\FantasyTeamService;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
 use RuntimeException;
@@ -18,18 +21,23 @@ use Throwable;
  * The app's first automated *write* action against the real LaLiga API: a
  * user schedules paying a rival's buyout clause the moment it unlocks.
  *
- * processOrder() (the shared check-and-maybe-pay step) runs from two places:
- * createOrder() itself (immediately, so scheduling an order for a clause
- * that's ALREADY unlocked doesn't sit there for up to
- * fantasy.sync.clause_orders_frequency_minutes doing nothing) and
- * processPendingOrders() (run on a schedule, see routes/console.php, for
- * orders that were still locked at creation time). Nothing else in this
- * codebase invokes a write endpoint automatically. Both always re-check live
- * (never trust the slower fantasy:sync-clauses snapshot, see
- * FantasySyncService) whether the clause is still locked and what it
- * currently costs, since racing other managers is the whole point:
- *   - still locked -> leave PENDING, try again next run.
- *   - unlocked, price unchanged or lower -> pay it automatically.
+ * processOrder() (the shared check-and-maybe-pay step, always called through
+ * attempt()) runs from three places: createOrder() itself (immediately, so
+ * scheduling an order for a clause that's ALREADY unlocked doesn't sit there
+ * doing nothing), processPendingOrders() (the regular poll, see
+ * routes/console.php — the safety net, always running regardless of
+ * anything else), and ProcessClauseOrderJob (a one-off job scheduled for the
+ * clause's own reported unlock instant, see schedulePreciseCheck() — this is
+ * what gets a payment attempt within seconds of the real unlock instead of
+ * up to fantasy.sync.clause_orders_frequency_minutes minutes later). All
+ * three always re-check live (never trust the slower fantasy:sync-clauses
+ * snapshot, see FantasySyncService) whether the clause is still locked and
+ * what it currently costs, since racing other managers is the whole point:
+ *   - still locked -> leave PENDING, schedule a precise re-check for the
+ *     reported unlock instant, and also try again on the next poll tick.
+ *   - unlocked, price unchanged or lower -> pay it automatically (claim()
+ *     makes sure only one of the poll/job pair that raced to this point
+ *     actually pays).
  *   - unlocked, price risen -> NEEDS_CONFIRMATION, never spends without
  *     the user explicitly confirming the new price via confirmAndExecute().
  */
@@ -86,11 +94,7 @@ class ClausePurchaseOrderService
         // make the user wait for the next fantasy:process-clause-orders tick
         // (up to FANTASY_SYNC_CLAUSE_ORDERS_FREQUENCY minutes later) — check
         // immediately, same logic the scheduled job uses.
-        try {
-            $this->processOrder($order);
-        } catch (Throwable $e) {
-            $this->markFailed($order, $e);
-        }
+        $this->attempt($order);
 
         return $order->fresh();
     }
@@ -123,11 +127,7 @@ class ClausePurchaseOrderService
             'status' => FantasyClausePurchaseOrder::STATUS_PENDING,
         ]);
 
-        try {
-            $this->processOrder($order);
-        } catch (Throwable $e) {
-            $this->markFailed($order, $e);
-        }
+        $this->attempt($order);
     }
 
     public function processPendingOrders(): void
@@ -135,13 +135,24 @@ class ClausePurchaseOrderService
         FantasyClausePurchaseOrder::where('status', FantasyClausePurchaseOrder::STATUS_PENDING)
             ->with(['account', 'league', 'targetTeam'])
             ->get()
-            ->each(function (FantasyClausePurchaseOrder $order) {
-                try {
-                    $this->processOrder($order);
-                } catch (Throwable $e) {
-                    $this->markFailed($order, $e);
-                }
-            });
+            ->each(fn (FantasyClausePurchaseOrder $order) => $this->attempt($order));
+    }
+
+    /**
+     * The one entry point every trigger (createOrder(), confirmAndExecute(),
+     * the regular poll, and ProcessClauseOrderJob's precisely-timed re-check)
+     * goes through: processOrder() never throws out uncaught — any real
+     * failure (API rejection, missing data, ...) always lands as a recorded
+     * FAILED order, never an unhandled exception bubbling up to a caller
+     * that didn't expect one (a scheduled command, a queued job, ...).
+     */
+    public function attempt(FantasyClausePurchaseOrder $order): void
+    {
+        try {
+            $this->processOrder($order);
+        } catch (Throwable $e) {
+            $this->markFailed($order, $e);
+        }
     }
 
     private function processOrder(FantasyClausePurchaseOrder $order): void
@@ -183,6 +194,8 @@ class ClausePurchaseOrderService
         }
 
         if ($isLocked) {
+            $this->schedulePreciseCheck($order, $entry->clauseLockedUntil);
+
             return;
         }
 
@@ -195,6 +208,14 @@ class ClausePurchaseOrderService
         $this->execute($order, $currentClauseValue);
     }
 
+    /**
+     * The clause unlocking exactly during the gap between two triggers is
+     * the whole reason both exist (see schedulePreciseCheck()): the regular
+     * poll and a precisely-timed ProcessClauseOrderJob can both land here
+     * for the same order around the same real-world instant, both having
+     * independently just read "unlocked, price OK" from the live roster.
+     * claim() below is what stops that from paying the clause twice.
+     */
     private function execute(FantasyClausePurchaseOrder $order, int $clauseValue): void
     {
         $account = $order->account;
@@ -206,6 +227,12 @@ class ClausePurchaseOrderService
 
         if (! $account->activeTeam) {
             throw new RuntimeException('No active team on this account.');
+        }
+
+        if (! $this->claim($order)) {
+            // Another trigger already claimed and is (or already did) pay
+            // this exact order — back off silently, this is not a failure.
+            return;
         }
 
         // Checked live, same as the clause value/lock state in processOrder()
@@ -225,6 +252,59 @@ class ClausePurchaseOrderService
             'executed_clause_value' => $clauseValue,
             'executed_at' => now(),
         ]);
+    }
+
+    /**
+     * Atomically flips PENDING -> EXECUTING with a single UPDATE ... WHERE
+     * status = 'PENDING' — the database, not application logic, decides
+     * which of two concurrent callers wins: only the one whose UPDATE
+     * actually matched a row gets to proceed to payClause(). The loser's
+     * UPDATE matches 0 rows and returns false. A subsequent failure (API
+     * rejection, insufficient funds, ...) still lands on markFailed() as
+     * normal — EXECUTING -> FAILED is exactly as valid a transition as
+     * PENDING -> FAILED was before this existed.
+     */
+    private function claim(FantasyClausePurchaseOrder $order): bool
+    {
+        return FantasyClausePurchaseOrder::where('id', $order->id)
+            ->where('status', FantasyClausePurchaseOrder::STATUS_PENDING)
+            ->update(['status' => FantasyClausePurchaseOrder::STATUS_EXECUTING]) === 1;
+    }
+
+    /**
+     * Schedules the one-off precise re-check (see ProcessClauseOrderJob) for
+     * a clause found still locked: fires `clause_unlock_check_buffer_seconds`
+     * after the clause's own reported unlock instant, so a payment attempt
+     * happens seconds — not up to `clause_orders_frequency_minutes` minutes —
+     * after the real unlock, without waiting for the next poll tick.
+     *
+     * Cache::add() (atomic "set if absent") keyed by order + unlock instant
+     * guards against scheduling a duplicate job every time processOrder()
+     * re-observes the same still-locked clause (every poll tick, every
+     * immediate check) — a second call for the *same* unlock instant is a
+     * no-op; a *different* instant (a rival re-locking the clause with a
+     * later deadline) schedules a fresh one, so this self-corrects if the
+     * reported unlock time moves.
+     */
+    private function schedulePreciseCheck(FantasyClausePurchaseOrder $order, string $clauseLockedUntil): void
+    {
+        $unlockAt = Carbon::parse($clauseLockedUntil);
+
+        if ($unlockAt->isPast()) {
+            // Shouldn't happen (processOrder() only calls this when
+            // $isLocked is true, i.e. clauseLockedUntil is in the future),
+            // but never schedule a job for a moment that's already gone.
+            return;
+        }
+
+        $cacheKey = "clause_order_precise_check:{$order->id}:{$unlockAt->timestamp}";
+
+        if (! Cache::add($cacheKey, true, $unlockAt->copy()->addMinutes(2))) {
+            return;
+        }
+
+        $bufferSeconds = (int) config('fantasy.sync.clause_unlock_check_buffer_seconds');
+        ProcessClauseOrderJob::dispatch($order->id)->delay($unlockAt->copy()->addSeconds($bufferSeconds));
     }
 
     private function markFailed(FantasyClausePurchaseOrder $order, Throwable $e): void

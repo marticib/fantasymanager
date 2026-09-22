@@ -97,6 +97,13 @@ return [
         // drives ClausePurchaseOrderService, where responsiveness is the
         // whole point (racing other managers the moment a clause unlocks).
         'clause_orders_frequency_minutes' => (int) env('FANTASY_SYNC_CLAUSE_ORDERS_FREQUENCY', 5),
+        // On top of the poll above, ClausePurchaseOrderService schedules a
+        // one-off precisely-timed re-check for the clause's own reported
+        // unlock instant (see schedulePreciseCheck()) — this many seconds
+        // after it, giving LaLiga's own backend a moment to actually flip
+        // the lock server-side before we ask. The poll stays the safety net
+        // if this job is ever lost (queue worker down, restart, ...).
+        'clause_unlock_check_buffer_seconds' => (int) env('FANTASY_CLAUSE_UNLOCK_CHECK_BUFFER_SECONDS', 2),
         'decision_snapshots_frequency_minutes' => (int) env('FANTASY_SNAPSHOT_DECISIONS_FREQUENCY', 720),
         'decision_evaluation_frequency_minutes' => (int) env('FANTASY_EVALUATE_DECISIONS_FREQUENCY', 720),
     ],

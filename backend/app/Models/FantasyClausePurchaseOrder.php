@@ -17,6 +17,14 @@ class FantasyClausePurchaseOrder extends Model
 
     public const STATUS_PENDING = 'PENDING';
 
+    // Transient: set for the instant between ClausePurchaseOrderService::
+    // claim() atomically winning the right to pay and the payClause() call
+    // actually resolving (EXECUTED/FAILED) — never a state a caller acts on
+    // deliberately, just the visible trace of the claim that stops the
+    // regular poll and the precisely-timed post-unlock job from both paying
+    // the same clause when they land around the same real-world instant.
+    public const STATUS_EXECUTING = 'EXECUTING';
+
     public const STATUS_NEEDS_CONFIRMATION = 'NEEDS_CONFIRMATION';
 
     public const STATUS_EXECUTED = 'EXECUTED';

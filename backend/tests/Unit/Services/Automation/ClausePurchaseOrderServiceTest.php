@@ -2,6 +2,7 @@
 
 namespace Tests\Unit\Services\Automation;
 
+use App\Jobs\ProcessClauseOrderJob;
 use App\Models\FantasyAccount;
 use App\Models\FantasyClausePurchaseOrder;
 use App\Models\FantasyLeague;
@@ -12,6 +13,7 @@ use App\Models\User;
 use App\Services\Automation\ClausePurchaseOrderService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 use InvalidArgumentException;
 use Tests\TestCase;
 
@@ -25,15 +27,29 @@ use Tests\TestCase;
  * (see the class docblock) — so, unlike before, EVERY successful createOrder()
  * call needs an Http::fake() already in place. Each test declares Http::fake()
  * EXACTLY ONCE: calling it a second time does NOT override an overlapping
+
  * pattern from the first call (confirmed against Laravel's real behavior —
  * the first-registered stub for a given pattern wins for the rest of the
  * test, even across separate fake() calls), so a two-phase scenario (order
  * created while locked, later found unlocked) uses Http::sequence() on the
  * roster endpoint within one fake() call instead of faking twice.
+ *
+ * Queue::fake() is set globally: with the test env's QUEUE_CONNECTION=sync,
+ * a real dispatch()->delay() from schedulePreciseCheck() would run inline
+ * right away (sync ignores delay), silently consuming an Http::sequence()
+ * response meant for a later, explicit processPendingOrders()/confirmAndExecute()
+ * call in the same test. The precise-check job's own behaviour is covered
+ * separately below and in ProcessClauseOrderJobTest.
  */
 class ClausePurchaseOrderServiceTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        Queue::fake();
+    }
 
     private function rosterSlot(string $id, string $name, int $clauseValue, string $playerTeamId, ?string $lockedUntil = null): array
     {
@@ -436,5 +452,139 @@ class ClausePurchaseOrderServiceTest extends TestCase
 
         $this->expectException(InvalidArgumentException::class);
         app(ClausePurchaseOrderService::class)->cancelOrder($order);
+    }
+
+    /** The whole point of this session's follow-up: a still-locked clause schedules a job timed to the real unlock instant, not just the next poll tick. */
+    public function test_a_still_locked_clause_schedules_a_precise_check_for_the_reported_unlock_instant(): void
+    {
+        [$account, , , $player] = $this->fixture();
+        $unlockAt = now()->addHours(6);
+        Http::fake([
+            '*/leagues/*/teams/*' => Http::response($this->rosterResponse(10_000_000, $unlockAt->toIso8601String()), 200),
+            '*' => Http::response(['data' => []], 200),
+        ]);
+
+        $order = app(ClausePurchaseOrderService::class)->createOrder($account, $player);
+
+        Queue::assertPushed(ProcessClauseOrderJob::class, function (ProcessClauseOrderJob $job) use ($order, $unlockAt) {
+            if ($job->orderId !== $order->id) {
+                return false;
+            }
+            $buffer = config('fantasy.sync.clause_unlock_check_buffer_seconds');
+
+            // delay() accepts a DateTimeInterface|int; Queueable stores it as-is.
+            return abs($job->delay->diffInSeconds($unlockAt->copy()->addSeconds($buffer))) <= 1;
+        });
+    }
+
+    /** Re-observing the exact same unlock instant (every poll tick while still locked) must not pile up duplicate jobs. */
+    public function test_repeated_polls_of_the_same_still_locked_clause_schedule_only_one_precise_check(): void
+    {
+        [$account, , , $player] = $this->fixture();
+        $this->fakeLockedRoster(); // same unlockAt (now()->addDay()) on every call
+
+        $service = app(ClausePurchaseOrderService::class);
+        $order = $service->createOrder($account, $player); // 1st schedule, inside createOrder()
+        $service->processPendingOrders(); // re-observes the same instant
+        $service->processPendingOrders(); // and again
+
+        Queue::assertPushed(ProcessClauseOrderJob::class, 1);
+        $this->assertSame(FantasyClausePurchaseOrder::STATUS_PENDING, $order->fresh()->status);
+    }
+
+    /** A rival re-locking with a later deadline must reschedule for the NEW instant, not silently keep the stale one. */
+    public function test_a_changed_unlock_instant_schedules_a_fresh_precise_check(): void
+    {
+        [$account, , , $player] = $this->fixture();
+        $firstUnlock = now()->addHours(3);
+        $secondUnlock = now()->addHours(9);
+        Http::fake([
+            '*/leagues/*/teams/*' => Http::sequence()
+                ->push($this->rosterResponse(10_000_000, $firstUnlock->toIso8601String()))
+                ->push($this->rosterResponse(10_000_000, $secondUnlock->toIso8601String())),
+            '*' => Http::response(['data' => []], 200),
+        ]);
+
+        $service = app(ClausePurchaseOrderService::class);
+        $service->createOrder($account, $player);
+        $service->processPendingOrders();
+
+        Queue::assertPushed(ProcessClauseOrderJob::class, 2);
+    }
+
+    /** ProcessClauseOrderJob, run directly (as the queue worker would once the delay elapses), pays a clause that has unlocked in the meantime. */
+    public function test_the_precise_check_job_pays_once_it_fires_after_the_real_unlock(): void
+    {
+        [$account, , , $player] = $this->fixture();
+        Http::fake([
+            '*/leagues/*/teams/*' => Http::sequence()
+                ->push($this->rosterResponse(10_000_000, now()->addMinutes(10)->toIso8601String())) // createOrder(): still locked
+                ->push($this->rosterResponse(10_000_000, null)), // the job's own live check: now unlocked
+            '*/teams/*/money*' => Http::response(['money' => 99_000_000], 200),
+            '*/league/*/buyout/*/pay*' => Http::response(['data' => ['success' => true]], 200),
+            '*' => Http::response(['data' => []], 200),
+        ]);
+
+        $order = app(ClausePurchaseOrderService::class)->createOrder($account, $player);
+        $this->assertSame(FantasyClausePurchaseOrder::STATUS_PENDING, $order->status);
+
+        (new ProcessClauseOrderJob($order->id))->handle(app(ClausePurchaseOrderService::class));
+
+        Http::assertSent(fn ($request) => str_contains($request->url(), '/league/L1/buyout/PT-99/pay'));
+        $fresh = $order->fresh();
+        $this->assertSame(FantasyClausePurchaseOrder::STATUS_EXECUTED, $fresh->status);
+        $this->assertSame(10_000_000, $fresh->executed_clause_value);
+    }
+
+    /** The job is a no-op once the order has already been handled by anything else (poll, manual confirm, cancel) — it never re-processes a settled order. */
+    public function test_the_precise_check_job_does_nothing_if_the_order_is_no_longer_pending(): void
+    {
+        [$account, , , $player] = $this->fixture();
+        $this->fakeLockedRoster();
+        $order = app(ClausePurchaseOrderService::class)->createOrder($account, $player);
+        $order->update(['status' => FantasyClausePurchaseOrder::STATUS_CANCELLED]);
+
+        (new ProcessClauseOrderJob($order->id))->handle(app(ClausePurchaseOrderService::class));
+
+        Http::assertNotSent(fn ($request) => str_contains($request->url(), '/buyout/'));
+        $this->assertSame(FantasyClausePurchaseOrder::STATUS_CANCELLED, $order->fresh()->status);
+    }
+
+    /** The job is a no-op for an order id that no longer exists (never crashes the queue worker). */
+    public function test_the_precise_check_job_does_nothing_for_a_missing_order(): void
+    {
+        (new ProcessClauseOrderJob(999_999))->handle(app(ClausePurchaseOrderService::class));
+        $this->addToAssertionCount(1); // reaching here without throwing is the assertion
+    }
+
+    /**
+     * The core race this session's request is really about: the regular
+     * poll and the precise post-unlock job both reaching execute() for the
+     * same order around the same real-world instant must never pay the
+     * clause twice. attempt()'s claim() (an atomic UPDATE ... WHERE
+     * status = 'PENDING') is what decides a winner — simulated here by
+     * calling attempt() twice in a row on the same freshly-unlocked order.
+     */
+    public function test_two_concurrent_triggers_for_the_same_newly_unlocked_order_never_pay_twice(): void
+    {
+        [$account, , , $player] = $this->fixture();
+        Http::fake([
+            '*/leagues/*/teams/*' => Http::response($this->rosterResponse(10_000_000, null), 200),
+            '*/teams/*/money*' => Http::response(['money' => 99_000_000], 200),
+            '*/league/*/buyout/*/pay*' => Http::response(['data' => ['success' => true]], 200),
+            '*' => Http::response(['data' => []], 200),
+        ]);
+        $order = app(ClausePurchaseOrderService::class)->createOrder($account, $player);
+        $this->assertSame(FantasyClausePurchaseOrder::STATUS_EXECUTED, $order->status);
+
+        // The poll only ever selects PENDING orders, so simulate the second
+        // trigger (the precisely-timed job) landing right after: it must see
+        // the order is no longer PENDING and do nothing, exactly like
+        // ProcessClauseOrderJob::handle() itself guards.
+        app(ClausePurchaseOrderService::class)->attempt($order->fresh());
+
+        $payClauseCalls = collect(Http::recorded())->filter(fn ($pair) => str_contains($pair[0]->url(), '/buyout/'))->count();
+        $this->assertSame(1, $payClauseCalls);
+        $this->assertSame(10_000_000, $order->fresh()->executed_clause_value);
     }
 }
