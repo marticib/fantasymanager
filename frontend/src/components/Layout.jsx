@@ -19,6 +19,7 @@ import {
   Calendar,
   ChevronDown,
   Menu,
+  Clock,
 } from 'lucide-react'
 
 const NAV_ITEMS = [
@@ -43,6 +44,34 @@ const MOBILE_TAB_ITEMS = [
   { to: '/market', label: 'Mercat', icon: ShoppingBag },
   { to: '/clauses', label: 'Clàusules', icon: Shield },
 ]
+
+/**
+ * Local browser time, HH:mm — a fixed reference point next to the sync
+ * status, useful whenever "fa X min/hores" alone isn't enough to reason
+ * about exactly when something (a sync, a clause unlock) happened or will.
+ * Ticks every 30s: plenty for minute-level display without a per-second
+ * re-render on every page (Layout wraps the whole app via Outlet).
+ */
+function HeaderClock() {
+  const [now, setNow] = useState(() => new Date())
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 30_000)
+    return () => clearInterval(id)
+  }, [])
+
+  return (
+    <span
+      className="hidden shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-border px-3 py-1.5 text-sm text-muted-foreground sm:flex"
+      title="Hora local d'aquest navegador"
+    >
+      <Clock className="h-4 w-4" />
+      <span className="num font-semibold text-foreground">
+        {new Intl.DateTimeFormat('ca-ES', { hour: '2-digit', minute: '2-digit' }).format(now)}
+      </span>
+    </span>
+  )
+}
 
 function LeagueSwitcher({ leagueName }) {
   const [open, setOpen] = useState(false)
@@ -295,6 +324,7 @@ export default function Layout() {
         </div>
 
         <div className="flex shrink-0 flex-nowrap items-center gap-2 sm:gap-3">
+          <HeaderClock />
           <button
             onClick={triggerSync}
             disabled={syncing}
