@@ -46,28 +46,28 @@ const MOBILE_TAB_ITEMS = [
 ]
 
 /**
- * Local browser time, HH:mm — a fixed reference point next to the sync
+ * Local browser time, HH:mm:ss — a fixed reference point next to the sync
  * status, useful whenever "fa X min/hores" alone isn't enough to reason
  * about exactly when something (a sync, a clause unlock) happened or will.
- * Ticks every 30s: plenty for minute-level display without a per-second
- * re-render on every page (Layout wraps the whole app via Outlet).
+ * Visible on every breakpoint, including mobile, so it stays compact
+ * (smaller type/padding below sm:) rather than hidden like the Jornada badge.
  */
 function HeaderClock() {
   const [now, setNow] = useState(() => new Date())
 
   useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 30_000)
+    const id = setInterval(() => setNow(new Date()), 1000)
     return () => clearInterval(id)
   }, [])
 
   return (
     <span
-      className="hidden shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-border px-3 py-1.5 text-sm text-muted-foreground sm:flex"
+      className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-lg border border-border px-1.5 py-1.5 text-xs text-muted-foreground sm:gap-1.5 sm:px-3 sm:text-sm"
       title="Hora local d'aquest navegador"
     >
-      <Clock className="h-4 w-4" />
+      <Clock className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
       <span className="num font-semibold text-foreground">
-        {new Intl.DateTimeFormat('ca-ES', { hour: '2-digit', minute: '2-digit' }).format(now)}
+        {new Intl.DateTimeFormat('ca-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(now)}
       </span>
     </span>
   )
