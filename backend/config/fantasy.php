@@ -103,7 +103,7 @@ return [
         // after it, giving LaLiga's own backend a moment to actually flip
         // the lock server-side before we ask. The poll stays the safety net
         // if this job is ever lost (queue worker down, restart, ...).
-        'clause_unlock_check_buffer_seconds' => (int) env('FANTASY_CLAUSE_UNLOCK_CHECK_BUFFER_SECONDS', 2),
+        'clause_unlock_check_buffer_seconds' => (int) env('FANTASY_CLAUSE_UNLOCK_CHECK_BUFFER_SECONDS', 1),
         'decision_snapshots_frequency_minutes' => (int) env('FANTASY_SNAPSHOT_DECISIONS_FREQUENCY', 720),
         'decision_evaluation_frequency_minutes' => (int) env('FANTASY_EVALUATE_DECISIONS_FREQUENCY', 720),
     ],
