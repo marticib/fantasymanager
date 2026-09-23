@@ -279,7 +279,7 @@ class FantasySyncService
                     'player_team_id' => $entry->playerTeamId,
                     'clause_value' => $dto->clauseValue,
                     'is_starter' => $entry->isStarter,
-                    'clause_locked_until' => $entry->clauseLockedUntil,
+                    'clause_locked_until' => $entry->clauseLockedUntil ? $this->parseDate($entry->clauseLockedUntil) : null,
                     'is_locked' => $entry->isShielded ?? false,
                     'raw_payload' => $dto->raw,
                 ],
@@ -436,10 +436,27 @@ class FantasySyncService
         return FantasyPlayer::updateOrCreate(['external_id' => $dto->externalId], $attributes);
     }
 
+    /**
+     * LaLiga's timestamps (`buyoutClauseLockedEndTime`, market `expirationDate`
+     * / `deadline`) carry an explicit UTC offset (confirmed live: e.g.
+     * "2026-10-07T10:47:25+02:00"), so Carbon::parse() already resolves them
+     * to the correct absolute instant. The bug this fixes is one step later:
+     * Eloquent's own `datetime` cast does NOT normalize a Carbon instance's
+     * timezone before formatting it for storage — it just writes out
+     * whatever offset the instance currently carries, so a "+02:00" value
+     * got its *Madrid wall-clock digits* ("10:47:25") written verbatim into
+     * a column the rest of the app reads back as UTC
+     * (config('app.timezone')) — silently making every stored clause
+     * unlock / market deadline 1-2h late (DST-dependent), even though the
+     * live isLocked/daysUntilUnlock checks that re-parse the raw string
+     * fresh each time (ClausePurchaseOrderService::processOrder(), its
+     * precise post-unlock job) were never affected by this. ->utc() forces
+     * the digits actually written to be the true UTC ones.
+     */
     private function parseDate(string $value): ?Carbon
     {
         try {
-            return Carbon::parse($value);
+            return Carbon::parse($value)->utc();
         } catch (\Throwable) {
             return null;
         }
