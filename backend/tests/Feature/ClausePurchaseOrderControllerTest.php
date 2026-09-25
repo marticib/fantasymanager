@@ -95,6 +95,44 @@ class ClausePurchaseOrderControllerTest extends TestCase
         $this->assertSame(FantasyClausePurchaseOrder::STATUS_PENDING, FantasyClausePurchaseOrder::find($order['id'])->status);
     }
 
+    /** The management list must show whether the clause is still locked right now, without any live API call. */
+    public function test_index_includes_the_current_lock_context_from_the_last_sync(): void
+    {
+        [$user, $player] = $this->fixture();
+        $this->fakeStillLocked();
+        $order = $this->actingAs($user, 'sanctum')->postJson('/api/clause-orders', ['fantasy_player_id' => $player->id])->json();
+
+        FantasyTeamPlayer::where('fantasy_player_id', $player->id)->update([
+            'clause_locked_until' => now()->addHours(5),
+        ]);
+
+        $list = $this->actingAs($user, 'sanctum')->getJson('/api/clause-orders');
+        $row = collect($list->json('data'))->firstWhere('id', $order['id']);
+
+        $this->assertTrue($row['isLocked']);
+        $this->assertNotNull($row['clauseLockedUntil']);
+        $this->assertSame(10_000_000, $row['currentClauseValue']);
+        $this->assertTrue($row['stillOnTargetTeam']);
+    }
+
+    /** A player sold/transferred away since the order was placed must show an honest null, never a stale guess. */
+    public function test_index_reports_no_current_context_when_the_player_left_the_target_team(): void
+    {
+        [$user, $player] = $this->fixture();
+        $this->fakeStillLocked();
+        $order = $this->actingAs($user, 'sanctum')->postJson('/api/clause-orders', ['fantasy_player_id' => $player->id])->json();
+
+        FantasyTeamPlayer::where('fantasy_player_id', $player->id)->delete();
+
+        $list = $this->actingAs($user, 'sanctum')->getJson('/api/clause-orders');
+        $row = collect($list->json('data'))->firstWhere('id', $order['id']);
+
+        $this->assertNull($row['isLocked']);
+        $this->assertNull($row['clauseLockedUntil']);
+        $this->assertNull($row['currentClauseValue']);
+        $this->assertFalse($row['stillOnTargetTeam']);
+    }
+
     public function test_rejects_creating_an_order_for_a_player_not_owned_by_a_rival(): void
     {
         $user = User::factory()->create();

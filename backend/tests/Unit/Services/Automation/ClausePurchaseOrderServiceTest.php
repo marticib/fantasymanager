@@ -470,10 +470,10 @@ class ClausePurchaseOrderServiceTest extends TestCase
             if ($job->orderId !== $order->id) {
                 return false;
             }
-            $buffer = config('fantasy.sync.clause_unlock_check_buffer_seconds');
+            $buffer = (float) config('fantasy.sync.clause_unlock_check_buffer_seconds');
 
             // delay() accepts a DateTimeInterface|int; Queueable stores it as-is.
-            return abs($job->delay->diffInSeconds($unlockAt->copy()->addSeconds($buffer))) <= 1;
+            return abs($job->delay->diffInSeconds($unlockAt->copy()->addMilliseconds((int) round($buffer * 1000)))) <= 1;
         });
     }
 

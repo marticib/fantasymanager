@@ -274,9 +274,17 @@ class ClausePurchaseOrderService
     /**
      * Schedules the one-off precise re-check (see ProcessClauseOrderJob) for
      * a clause found still locked: fires `clause_unlock_check_buffer_seconds`
-     * after the clause's own reported unlock instant, so a payment attempt
-     * happens seconds — not up to `clause_orders_frequency_minutes` minutes —
-     * after the real unlock, without waiting for the next poll tick.
+     * (may be fractional, e.g. 0.2) after the clause's own reported unlock
+     * instant, so a payment attempt happens sub-second — not up to
+     * `clause_orders_frequency_minutes` minutes — after the real unlock,
+     * without waiting for the next poll tick. Note: with QUEUE_CONNECTION=
+     * database (this app's default), the queue's own available_at column is
+     * whole seconds (Illuminate\Support\InteractsWithTime::availableAt()
+     * truncates via DateTime::getTimestamp()), so a sub-second buffer is
+     * rounded away there — the buffer only has sub-second effect with
+     * QUEUE_CONNECTION=redis (delayed jobs kept in a sorted set scored by
+     * real microtime), which is also this app's own documented recommendation
+     * for production (see README "Producció").
      *
      * Cache::add() (atomic "set if absent") keyed by order + unlock instant
      * guards against scheduling a duplicate job every time processOrder()
@@ -303,8 +311,8 @@ class ClausePurchaseOrderService
             return;
         }
 
-        $bufferSeconds = (int) config('fantasy.sync.clause_unlock_check_buffer_seconds');
-        ProcessClauseOrderJob::dispatch($order->id)->delay($unlockAt->copy()->addSeconds($bufferSeconds));
+        $bufferSeconds = (float) config('fantasy.sync.clause_unlock_check_buffer_seconds');
+        ProcessClauseOrderJob::dispatch($order->id)->delay($unlockAt->copy()->addMilliseconds((int) round($bufferSeconds * 1000)));
     }
 
     private function markFailed(FantasyClausePurchaseOrder $order, Throwable $e): void

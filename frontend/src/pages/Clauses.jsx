@@ -4,6 +4,7 @@ import apiClient from '../api/client'
 import ScoreRing from '../components/ScoreRing'
 import Sparkline from '../components/Sparkline'
 import { ShieldIcon, WalletIcon, ArrowRightIcon } from '../components/Icons'
+import ClauseOrdersPanel from '../components/ClauseOrdersPanel'
 import { formatMoneyM, formatDelta, formatPercent, POSITION_LABELS, initials, ACTION_LABELS } from '../utils/format'
 
 const POSITIONS = ['GK', 'DF', 'MF', 'FW']
@@ -233,6 +234,8 @@ export default function Clauses() {
       {payload.available === false && (
         <div className="mt-4 rounded-2xl border border-border bg-surface p-6 text-sm text-muted-foreground">{payload.message}</div>
       )}
+
+      <ClauseOrdersPanel />
 
       {top && (
         <div className="mt-5 flex flex-col gap-6 rounded-2xl border border-info/30 bg-info/5 p-6 lg:flex-row lg:items-center lg:justify-between">

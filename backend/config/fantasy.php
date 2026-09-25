@@ -100,10 +100,13 @@ return [
         // On top of the poll above, ClausePurchaseOrderService schedules a
         // one-off precisely-timed re-check for the clause's own reported
         // unlock instant (see schedulePreciseCheck()) — this many seconds
-        // after it, giving LaLiga's own backend a moment to actually flip
-        // the lock server-side before we ask. The poll stays the safety net
-        // if this job is ever lost (queue worker down, restart, ...).
-        'clause_unlock_check_buffer_seconds' => (int) env('FANTASY_CLAUSE_UNLOCK_CHECK_BUFFER_SECONDS', 1),
+        // (fractional allowed, e.g. 0.2) after it, giving LaLiga's own
+        // backend a moment to actually flip the lock server-side before we
+        // ask. The poll stays the safety net if this job is ever lost (queue
+        // worker down, restart, ...). Sub-second precision only actually
+        // takes effect with QUEUE_CONNECTION=redis — see
+        // ClausePurchaseOrderService::schedulePreciseCheck()'s docblock.
+        'clause_unlock_check_buffer_seconds' => (float) env('FANTASY_CLAUSE_UNLOCK_CHECK_BUFFER_SECONDS', 0.2),
         'decision_snapshots_frequency_minutes' => (int) env('FANTASY_SNAPSHOT_DECISIONS_FREQUENCY', 720),
         'decision_evaluation_frequency_minutes' => (int) env('FANTASY_EVALUATE_DECISIONS_FREQUENCY', 720),
     ],
