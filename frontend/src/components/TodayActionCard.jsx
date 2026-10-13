@@ -33,17 +33,26 @@ const BG_CLASS = {
   hold: 'bg-muted-foreground/10 text-muted-foreground',
 }
 
-function Stat({ label, value, accent, hint }) {
+function Stat({ label, value, accent, hint, onBid, busy }) {
   return (
     <div className={accent ? `rounded-xl p-3 ${BG_CLASS[accent]}` : 'rounded-xl border border-border p-3'}>
       <p className="text-[11px] font-semibold uppercase tracking-wide opacity-80">{label}</p>
       <p className="mt-1 text-lg font-bold">{value}</p>
       {hint && <p className="mt-0.5 text-[10px] opacity-70">{hint}</p>}
+      {onBid && (
+        <button
+          onClick={onBid}
+          disabled={busy}
+          className="mt-1.5 w-full rounded-md border border-current/30 py-1 text-[11px] font-semibold opacity-90 hover:opacity-100 disabled:opacity-50"
+        >
+          Pujar
+        </button>
+      )}
     </div>
   )
 }
 
-export default function TodayActionCard({ action }) {
+export default function TodayActionCard({ action, onBid, busy }) {
   const meta = TYPE_META[action.type] || { label: action.title || 'ACCIÓ', color: 'hold', cta: 'Veure detall' }
   const color = action.type === 'ACCEPT_OFFER' && action.recommendation !== 'TRADE_PROFIT' ? meta.color : meta.color
   const player = action.player
@@ -126,9 +135,25 @@ export default function TodayActionCard({ action }) {
 
         {action.type === 'BUY' && (
           <div className="grid grid-cols-2 gap-2">
-            <Stat label="Valor" value={formatMoneyM(action.currentValue)} />
-            <Stat label="Oferta recomanada" value={formatMoneyM(action.recommendedBid)} accent="bull" />
-            <Stat label="Màxim" value={formatMoneyM(action.maxBid)} />
+            <Stat
+              label="Valor"
+              value={formatMoneyM(action.currentValue)}
+              onBid={onBid && action.marketPlayerId && (() => onBid(action, action.currentValue, 'al valor actual'))}
+              busy={busy}
+            />
+            <Stat
+              label="Oferta recomanada"
+              value={formatMoneyM(action.recommendedBid)}
+              accent="bull"
+              onBid={onBid && action.marketPlayerId && (() => onBid(action, action.recommendedBid, 'recomanada'))}
+              busy={busy}
+            />
+            <Stat
+              label="Màxim"
+              value={formatMoneyM(action.maxBid)}
+              onBid={onBid && action.marketPlayerId && (() => onBid(action, action.maxBid, 'màxima'))}
+              busy={busy}
+            />
             {action.metadata?.expectedROI14d != null && (
               <Stat label="ROI 14d" value={formatPercent(action.metadata.expectedROI14d * 100)} />
             )}

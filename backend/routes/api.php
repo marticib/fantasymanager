@@ -50,6 +50,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/market', [MarketController::class, 'index']);
     Route::get('/market/opportunities', [MarketController::class, 'opportunities']);
     Route::get('/market/{marketPlayer}/buy-analysis', [MarketController::class, 'buyAnalysis']);
+    Route::post('/market/{marketPlayer}/bid', [MarketController::class, 'placeBid']);
 
     // Players
     Route::get('/players', [PlayerController::class, 'index']);

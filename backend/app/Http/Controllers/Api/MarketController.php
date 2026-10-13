@@ -8,6 +8,9 @@ use App\Models\FantasyClub;
 use App\Models\FantasyExternalTrend;
 use App\Models\FantasyMarketPlayer;
 use App\Models\FantasyRecommendation;
+use App\Services\FantasyApi\Exceptions\FantasyApiException;
+use App\Services\FantasyApi\FantasyMarketService;
+use App\Services\FantasyApi\FantasyTeamService;
 use App\Services\Recommendation\FantasySettingsService;
 use App\Services\Recommendation\MarketAuctionPremiumEstimator;
 use App\Services\Recommendation\MarketBuyAnalysisService;
@@ -212,6 +215,55 @@ class MarketController extends Controller
         );
 
         return response()->json($buyAnalysis->toArray());
+    }
+
+    /**
+     * Places a real bid on a market listing (FantasyMarketService::bid() —
+     * see its docblock for how the shape was confirmed). Re-checks live
+     * available money right before bidding, same discipline as
+     * ClausePurchaseOrderService::execute(): `fantasy_teams.money` is only as
+     * fresh as the last `fantasy:sync-team` run, nowhere near tight enough
+     * right before committing real money.
+     */
+    public function placeBid(Request $request, FantasyMarketPlayer $marketPlayer, FantasyMarketService $marketService, FantasyTeamService $teamService)
+    {
+        $account = $this->currentAccount($request);
+        $team = $account->activeTeam;
+        $league = $account->activeLeague;
+
+        if (! $team || ! $league || $marketPlayer->fantasy_league_id !== $league->id) {
+            return response()->json(['message' => 'Listing not found.'], 404);
+        }
+
+        if ($marketPlayer->seller_team_id === $team->id) {
+            return response()->json(['message' => 'No pots pujar una oferta pel teu propi jugador en venda.'], 422);
+        }
+
+        $amount = (int) $request->validate(['amount' => ['required', 'integer', 'min:1']])['amount'];
+
+        $marketId = data_get($marketPlayer->raw_payload, 'id');
+
+        if (! $marketId) {
+            return response()->json(['message' => 'Missing market listing id — try syncing the market first.'], 422);
+        }
+
+        $availableMoney = $teamService->getMoney($account, $team->external_id);
+
+        if ($amount > $availableMoney) {
+            return response()->json(['message' => "No tens prou diners: calen {$amount}, en tens {$availableMoney}."], 422);
+        }
+
+        try {
+            $marketService->bid($account, $league->external_id, (string) $marketId, $amount);
+        } catch (FantasyApiException $e) {
+            return response()->json([
+                'message' => 'LaLiga Fantasy ha rebutjat la puja.',
+                'error' => $e->getMessage(),
+                'details' => $e->responseBody,
+            ], 422);
+        }
+
+        return response()->json(['message' => 'Oferta enviada.', 'amount' => $amount]);
     }
 
     public function opportunities(Request $request)

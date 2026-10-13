@@ -86,17 +86,23 @@ class FantasyMarketService
         ]);
     }
 
+    /**
+     * Bids on a market listing (MarketController::placeBid() — wired to the
+     * "Oferta recomanada"/"Màxim" buttons). Shape confirmed the same way as
+     * accept/rejectOffer()/sellToMarket(): cross-checked against a community
+     * client hitting this same API, not our own prior traffic.
+     */
+    public function bid(FantasyAccount $account, string $leagueId, string $marketId, int $amount): array
+    {
+        return $this->client->post($account, $this->competitionPath("/league/{$leagueId}/market/{$marketId}/bid"), ['money' => $amount]);
+    }
+
     // --- The following are write operations. They are intentionally left as
     // thin, explicit wrappers (never called automatically by the sync/recommendation
     // pipeline) so a future "act on this recommendation" button has a safe,
     // already-abstracted place to call into — but nothing in this codebase
     // invokes them yet. The app is read-only until a human wires up a UI
     // action to one of these. ---
-
-    public function bid(FantasyAccount $account, string $leagueId, string $marketId, int $amount): array
-    {
-        return $this->client->post($account, $this->competitionPath("/league/{$leagueId}/market/{$marketId}/bid"), ['money' => $amount]);
-    }
 
     public function cancelBid(FantasyAccount $account, string $leagueId, string $marketId, string $bidId): array
     {

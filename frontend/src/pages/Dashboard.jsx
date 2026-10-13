@@ -52,6 +52,26 @@ export default function Dashboard() {
   const [error, setError] = useState('')
   const [syncing, setSyncing] = useState(false)
   const [ordersNeedingConfirmation, setOrdersNeedingConfirmation] = useState([])
+  const [busyBidId, setBusyBidId] = useState(null)
+  const [bidNotice, setBidNotice] = useState('')
+  const [bidError, setBidError] = useState('')
+
+  const placeBid = async (action, amount, label) => {
+    if (!amount || amount === 'DO_NOT_CHASE' || !action.marketPlayerId) return
+    const rounded = Math.round(amount)
+    if (!window.confirm(`Pujar una oferta ${label} de ${formatMoneyM(rounded)} per ${action.player?.name}?`)) return
+    setBidError('')
+    setBidNotice('')
+    setBusyBidId(action.marketPlayerId)
+    try {
+      await apiClient.post(`/market/${action.marketPlayerId}/bid`, { amount: rounded })
+      setBidNotice(`Oferta ${label} de ${formatMoneyM(rounded)} enviada per ${action.player?.name}.`)
+    } catch (err) {
+      setBidError(err.response?.data?.message || 'No s\'ha pogut enviar la puja.')
+    } finally {
+      setBusyBidId(null)
+    }
+  }
 
   const load = () => {
     apiClient
@@ -107,6 +127,9 @@ export default function Dashboard() {
         {data.currentMatchday ? ` · Jornada ${data.currentMatchday}` : ''}
         {today && !today.nothingToDoToday ? ` · ${today.summary}` : ''}
       </p>
+
+      {bidNotice && <p className="mt-3 text-sm text-bull">{bidNotice}</p>}
+      {bidError && <p className="mt-3 text-sm text-bear">{bidError}</p>}
 
       {ordersNeedingConfirmation.length > 0 && (
         <div className="mt-5 rounded-xl border border-info/30 bg-info/10 px-5 py-4">
@@ -172,7 +195,12 @@ export default function Dashboard() {
               <p className="text-sm text-muted-foreground">Accions que realment s'han de fer avui.</p>
               <div className="mt-4 grid grid-cols-1 gap-5 lg:grid-cols-3">
                 {actions.urgent.map((action, i) => (
-                  <TodayActionCard key={`${action.type}-${action.player?.id}-${i}`} action={action} />
+                  <TodayActionCard
+                    key={`${action.type}-${action.player?.id}-${i}`}
+                    action={action}
+                    onBid={placeBid}
+                    busy={busyBidId === action.marketPlayerId}
+                  />
                 ))}
               </div>
             </div>
@@ -184,7 +212,12 @@ export default function Dashboard() {
               <p className="text-sm text-muted-foreground">Operacions interessants però no necessàriament urgents.</p>
               <div className="mt-4 grid grid-cols-1 gap-5 lg:grid-cols-3">
                 {actions.opportunity.map((action, i) => (
-                  <TodayActionCard key={`${action.type}-${action.player?.id}-${i}`} action={action} />
+                  <TodayActionCard
+                    key={`${action.type}-${action.player?.id}-${i}`}
+                    action={action}
+                    onBid={placeBid}
+                    busy={busyBidId === action.marketPlayerId}
+                  />
                 ))}
               </div>
             </div>

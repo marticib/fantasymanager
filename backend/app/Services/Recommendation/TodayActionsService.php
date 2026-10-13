@@ -425,7 +425,7 @@ class TodayActionsService
                 auctionHistorySource: $premium['source'],
             );
 
-            if ($action = $this->buyAction($player, $listing->expires_at, $buy)) {
+            if ($action = $this->buyAction($player, $listing, $buy)) {
                 $actions[] = $action;
             }
         }
@@ -436,7 +436,7 @@ class TodayActionsService
     /**
      * @return array<string, mixed>|null
      */
-    private function buyAction(FantasyPlayer $player, ?Carbon $expiresAt, MarketBuyAnalysis $buy): ?array
+    private function buyAction(FantasyPlayer $player, FantasyMarketPlayer $listing, MarketBuyAnalysis $buy): ?array
     {
         // WAIT/DO_NOT_BUY never appear here, however soon the market closes —
         // an imminent deadline never turns a mediocre deal into an opportunity.
@@ -444,6 +444,7 @@ class TodayActionsService
             return null;
         }
 
+        $expiresAt = $listing->expires_at;
         $chaseable = $buy->recommendedBid !== 'DO_NOT_CHASE';
 
         if ($buy->recommendation === 'CONSIDER') {
@@ -476,6 +477,11 @@ class TodayActionsService
 
         return [
             'player' => $this->playerPayload($player),
+            // FantasyMarketPlayer.id (not the player's own id) — what
+            // MarketController::placeBid()'s route expects, so the "Pujar"
+            // buttons on this card can hit the same /market/{id}/bid endpoint
+            // as the Market page.
+            'marketPlayerId' => $listing->id,
             'type' => $chaseable ? 'BUY' : 'DO_NOT_CHASE',
             'category' => $category,
             'priorityScore' => $priorityScore,
