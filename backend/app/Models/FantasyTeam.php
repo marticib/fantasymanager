@@ -18,6 +18,7 @@ class FantasyTeam extends Model
         'name',
         'manager_name',
         'is_mine',
+        'auto_list_squad',
         'money',
         'team_value',
         'raw_payload',
@@ -27,6 +28,7 @@ class FantasyTeam extends Model
     {
         return [
             'is_mine' => 'boolean',
+            'auto_list_squad' => 'boolean',
             'raw_payload' => 'array',
         ];
     }

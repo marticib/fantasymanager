@@ -6,7 +6,12 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\FantasyPlayerResource;
 use App\Http\Resources\FantasyTeamResource;
 use App\Models\FantasyExternalTrend;
+use App\Models\FantasyMarketPlayer;
 use App\Models\FantasyTeam;
+use App\Services\Automation\SquadListingService;
+use App\Services\FantasyApi\DTOs\FantasyMarketOfferDTO;
+use App\Services\FantasyApi\Exceptions\FantasyApiException;
+use App\Services\FantasyApi\FantasyMarketService;
 use App\Services\Recommendation\FantasyScoreService;
 use App\Services\Recommendation\FantasySettingsService;
 use App\Services\Recommendation\PlayerDecisionEngine;
@@ -14,6 +19,7 @@ use App\Services\Recommendation\PlayerTrendPresenter;
 use App\Services\Recommendation\RivalClausePresenter;
 use App\Services\Recommendation\TeamValueDeltaService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class TeamController extends Controller
 {
@@ -193,7 +199,104 @@ class TeamController extends Controller
         ]);
     }
 
-    public function lineup(Request $request, FantasyScoreService $scoreService)
+    /**
+     * Own players currently listed for sale on the market (`FantasyMarketPlayer.seller_team_id`
+     * = this team). `askingPrice` is the sale price *you* set when listing the player — not
+     * an offer from anyone — so it's surfaced as `salePrice`, never as `marketOffer`. A real
+     * offer only exists once another manager actually bids: `numberOfOffers` on the listing
+     * says whether that's happened, and only then do we spend a live call on
+     * `FantasyMarketService::getDirectOffer()` to find out how much — confirmed live that
+     * `numberOfOffers: 0` is the normal case, so this stays cheap. `marketOffer` is `null`
+     * until there's a real pending one; the profit/loss column is computed against it, not
+     * against `salePrice`, so a listing with no offers yet correctly shows "no verdict" rather
+     * than a gain/loss that hasn't actually happened. Each resolved offer is also returned in
+     * full under `offers` (id/money/status/expiresAt) so the UI can accept/reject individually
+     * — see acceptSaleOffer()/rejectSaleOffer(). `purchasePrice` comes from the league activity
+     * feed (FantasySyncService::syncTransactions()) and is `null`, never guessed, for a player
+     * acquired before that feed's history (e.g. the initial squad).
+     */
+    public function sales(Request $request, FantasyMarketService $marketService)
+    {
+        $account = $this->currentAccount($request);
+        $team = $account->activeTeam;
+        $league = $account->activeLeague;
+
+        if (! $team || ! $league) {
+            return response()->json(['message' => 'No active team selected yet. Select a league first.'], 404);
+        }
+
+        $purchasePrices = $team->teamPlayers()->pluck('purchase_price', 'fantasy_player_id');
+
+        $rows = FantasyMarketPlayer::query()
+            ->where('fantasy_league_id', $team->fantasy_league_id)
+            ->where('seller_team_id', $team->id)
+            ->where('is_on_market', true)
+            ->with('player')
+            ->get()
+            ->filter(fn (FantasyMarketPlayer $listing) => $listing->player)
+            ->map(function (FantasyMarketPlayer $listing) use ($purchasePrices, $marketService, $account, $league) {
+                $purchasePrice = $purchasePrices->get($listing->fantasy_player_id);
+                $numberOfOffers = (int) ($listing->raw_payload['numberOfOffers'] ?? 0);
+                $fetch = $numberOfOffers > 0 ? $this->fetchOffers($listing, $marketService, $account, $league) : ['offers' => [], 'failed' => false];
+                $pending = collect($fetch['offers'])->filter(fn (FantasyMarketOfferDTO $o) => in_array($o->status, [null, FantasyMarketOfferDTO::STATUS_PENDING], true) && $o->money !== null);
+                $marketOffer = $pending->isNotEmpty() ? $pending->max('money') : null;
+
+                $profit = ($purchasePrice !== null && $marketOffer !== null) ? $marketOffer - $purchasePrice : null;
+                $profitPct = ($profit !== null && $purchasePrice > 0) ? round(($profit / $purchasePrice) * 100, 1) : null;
+
+                return [
+                    'id' => $listing->id,
+                    'player' => (new FantasyPlayerResource($listing->player))->resolve(),
+                    'marketValue' => $listing->market_value,
+                    'salePrice' => $listing->asking_price,
+                    'numberOfOffers' => $numberOfOffers,
+                    'marketOffer' => $marketOffer,
+                    // True when the listing's cached data said there should be
+                    // at least one offer but the live lookup to confirm it
+                    // failed (typically a stale playerTeamId — see
+                    // fetchOffers()) — distinct from numberOfOffers === 0,
+                    // which means we successfully confirmed there are none.
+                    // The UI must show "couldn't check", never a confident
+                    // "N offers" with no amount for this case.
+                    'offersCheckFailed' => $numberOfOffers > 0 && $fetch['failed'],
+                    'offers' => $pending->map(fn (FantasyMarketOfferDTO $o) => [
+                        'id' => $o->id,
+                        'money' => $o->money,
+                        'expiresAt' => $o->expiresAt,
+                    ])->values(),
+                    'purchasePrice' => $purchasePrice,
+                    'profit' => $profit,
+                    'profitPct' => $profitPct,
+                    'expiresAt' => $listing->expires_at?->toIso8601String(),
+                ];
+            })
+            ->values();
+
+        $withKnownProfit = $rows->filter(fn ($r) => $r['profit'] !== null);
+
+        return response()->json([
+            'players' => $rows,
+            'autoListSquad' => (bool) $team->auto_list_squad,
+            'summary' => [
+                'count' => $rows->count(),
+                'withOffers' => $rows->filter(fn ($r) => $r['numberOfOffers'] > 0)->count(),
+                // Only the rows with both a known offer and a known purchase_price
+                // count toward this — profitKnownCount tells the UI how many of
+                // $count that is, so it can caveat a partial total instead of
+                // implying it's complete.
+                'totalProfit' => $withKnownProfit->isNotEmpty() ? $withKnownProfit->sum('profit') : null,
+                'profitKnownCount' => $withKnownProfit->count(),
+            ],
+        ]);
+    }
+
+    /**
+     * Toggles `FantasyTeam.auto_list_squad` (see SquadListingService). Turning
+     * it on lists every not-yet-listed roster player immediately, in the same
+     * request — rather than waiting for the next scheduled fantasy:sync-team
+     * run — so the Vendes page reflects it right away.
+     */
+    public function updateAutoListSquad(Request $request, SquadListingService $squadListingService)
     {
         $account = $this->currentAccount($request);
         $team = $account->activeTeam;
@@ -202,34 +305,141 @@ class TeamController extends Controller
             return response()->json(['message' => 'No active team selected yet. Select a league first.'], 404);
         }
 
-        $ranked = $team->players()->get()->map(function ($player) use ($account, $scoreService) {
-            $score = $scoreService->compute($player, $account);
-            $status = strtolower((string) $player->status);
+        $enabled = (bool) $request->validate(['enabled' => ['required', 'boolean']])['enabled'];
+        $team->update(['auto_list_squad' => $enabled]);
 
-            return [
-                'player' => (new FantasyPlayerResource($player))->resolve(),
-                'fantasyScore' => $score->total,
-                'availability' => in_array($status, ['injured', 'doubtful', 'sanctioned'], true) ? 'DUBTE' : 'OK',
-            ];
-        })->sortByDesc('fantasyScore')->values();
-
-        // Simple 1-4-4-2-shaped XI purely from Fantasy Score ranking; a real
-        // formation/tactics picker is a later phase (see README roadmap).
-        $slots = ['GK' => 1, 'DF' => 4, 'MF' => 4, 'FW' => 2];
-        $starters = collect();
-
-        foreach ($slots as $position => $count) {
-            $starters = $starters->merge(
-                $ranked->where('player.position', $position)->take($count)
-            );
+        $result = ['listed' => 0, 'failed' => 0];
+        if ($enabled) {
+            $result = $squadListingService->listMissingPlayers($account);
         }
 
-        $starterIds = $starters->pluck('player.id');
-        $bench = $ranked->reject(fn ($row) => $starterIds->contains($row['player']['id']))->values();
-
         return response()->json([
-            'starters' => $starters->values()->map(fn ($r) => array_merge($r, ['role' => 'TITULAR'])),
-            'bench' => $bench->map(fn ($r) => array_merge($r, ['role' => $r['availability'] === 'DUBTE' ? 'DUBTE' : 'BANQUETA'])),
+            'autoListSquad' => $enabled,
+            'listed' => $result['listed'],
+            'failed' => $result['failed'],
         ]);
+    }
+
+    /**
+     * Accepts one pending offer on one of your own listings. Re-fetches the
+     * offer live (rather than trusting any amount the frontend might send)
+     * since LaLiga requires the exact current amount back as a confirmation
+     * check and the offer could have expired or changed since the page loaded.
+     */
+    public function acceptSaleOffer(Request $request, FantasyMarketPlayer $marketPlayer, string $offerId, FantasyMarketService $marketService)
+    {
+        [$account, $league, $marketId, $error] = $this->resolveOwnListing($request, $marketPlayer);
+
+        if ($error) {
+            return $error;
+        }
+
+        $offer = $this->findOffer($marketPlayer, $offerId, $marketService, $account, $league);
+
+        if (! $offer || $offer->money === null) {
+            return response()->json(['message' => 'Aquesta oferta ja no existeix (potser ha caducat o algú altre l\'ha retirada).'], 404);
+        }
+
+        try {
+            $marketService->acceptOffer($account, $league->external_id, (string) $marketId, $offerId, $offer->money);
+        } catch (FantasyApiException $e) {
+            return response()->json([
+                'message' => 'LaLiga Fantasy ha rebutjat acceptar l\'oferta.',
+                'error' => $e->getMessage(),
+                'details' => $e->responseBody,
+            ], 422);
+        }
+
+        return response()->json(['message' => 'Oferta acceptada.', 'amount' => $offer->money]);
+    }
+
+    /**
+     * Rejects one pending offer on one of your own listings.
+     */
+    public function rejectSaleOffer(Request $request, FantasyMarketPlayer $marketPlayer, string $offerId, FantasyMarketService $marketService)
+    {
+        [$account, $league, $marketId, $error] = $this->resolveOwnListing($request, $marketPlayer);
+
+        if ($error) {
+            return $error;
+        }
+
+        try {
+            $marketService->rejectOffer($account, $league->external_id, (string) $marketId, $offerId);
+        } catch (FantasyApiException $e) {
+            return response()->json([
+                'message' => 'LaLiga Fantasy ha rebutjat descartar l\'oferta.',
+                'error' => $e->getMessage(),
+                'details' => $e->responseBody,
+            ], 422);
+        }
+
+        return response()->json(['message' => 'Oferta rebutjada.']);
+    }
+
+    /**
+     * Confirms $marketPlayer is actually one of this account's own listings
+     * (never act on an id belonging to another league/account just because
+     * it was guessable), and resolves the external ids LaLiga's accept/reject
+     * endpoints need. Returns [account, league, marketId, null] on success,
+     * or [null, null, null, JsonResponse] to return straight from the caller.
+     */
+    private function resolveOwnListing(Request $request, FantasyMarketPlayer $marketPlayer): array
+    {
+        $account = $this->currentAccount($request);
+        $team = $account->activeTeam;
+        $league = $account->activeLeague;
+
+        if (! $team || ! $league || $marketPlayer->fantasy_league_id !== $league->id || $marketPlayer->seller_team_id !== $team->id) {
+            return [null, null, null, response()->json(['message' => 'Listing not found.'], 404)];
+        }
+
+        $marketId = data_get($marketPlayer->raw_payload, 'id');
+
+        if (! $marketId) {
+            return [null, null, null, response()->json(['message' => 'Missing market listing id.'], 422)];
+        }
+
+        return [$account, $league, $marketId, null];
+    }
+
+    private function findOffer(FantasyMarketPlayer $listing, string $offerId, FantasyMarketService $marketService, $account, $league): ?FantasyMarketOfferDTO
+    {
+        return collect($this->fetchOffers($listing, $marketService, $account, $league)['offers'])
+            ->first(fn (FantasyMarketOfferDTO $o) => $o->id === $offerId);
+    }
+
+    /**
+     * @return FantasyMarketOfferDTO[]
+     */
+    /**
+     * @return array{offers: FantasyMarketOfferDTO[], failed: bool}
+     */
+    private function fetchOffers(FantasyMarketPlayer $listing, FantasyMarketService $marketService, $account, $league): array
+    {
+        $playerTeamId = data_get($listing->raw_payload, 'playerTeam.playerTeamId');
+
+        if (! $playerTeamId) {
+            return ['offers' => [], 'failed' => true];
+        }
+
+        try {
+            return ['offers' => $marketService->getDirectOffer($account, $league->external_id, (string) $playerTeamId), 'failed' => false];
+        } catch (\Throwable $e) {
+            // Confirmed live: this 403s when the listing's cached `playerTeamId`
+            // has gone stale relative to the live one — LaLiga regenerates it
+            // whenever the player's clause lock/slot rotates (e.g. it unlocks),
+            // and our copy is only as fresh as the last fantasy:sync-market run.
+            // This is *not* the same as "confirmed zero offers" (an empty
+            // array from a successful call) — `failed: true` lets the caller
+            // tell "no offers" apart from "couldn't check right now" instead
+            // of silently treating a lookup failure as if nothing was there.
+            Log::channel('fantasy_api')->warning('fantasy.sales.offer_lookup_failed', [
+                'listing_id' => $listing->id,
+                'message' => $e->getMessage(),
+            ]);
+
+            return ['offers' => [], 'failed' => true];
+        }
     }
 }

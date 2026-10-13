@@ -7,7 +7,7 @@ import Onboarding from './pages/Onboarding'
 import Dashboard from './pages/Dashboard'
 import Market from './pages/Market'
 import Team from './pages/Team'
-import Lineup from './pages/Lineup'
+import Sales from './pages/Sales'
 import Clauses from './pages/Clauses'
 import Trading from './pages/Trading'
 import Standings from './pages/Standings'
@@ -49,7 +49,7 @@ export default function App() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/market" element={<Market />} />
             <Route path="/team" element={<Team />} />
-            <Route path="/lineup" element={<Lineup />} />
+            <Route path="/sales" element={<Sales />} />
             <Route path="/clauses" element={<Clauses />} />
             <Route path="/trading" element={<Trading />} />
             <Route path="/players" element={<Players />} />

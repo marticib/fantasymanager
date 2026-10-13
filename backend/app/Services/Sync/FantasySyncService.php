@@ -12,6 +12,8 @@ use App\Models\FantasyPlayerSnapshot;
 use App\Models\FantasyStanding;
 use App\Models\FantasyTeam;
 use App\Models\FantasyTeamPlayer;
+use App\Services\Automation\SquadListingService;
+use App\Services\FantasyApi\DTOs\FantasyActivityDTO;
 use App\Services\FantasyApi\DTOs\FantasyPlayerDTO;
 use App\Services\FantasyApi\DTOs\FantasyRosterEntryDTO;
 use App\Services\FantasyApi\FantasyLeagueService;
@@ -37,6 +39,7 @@ class FantasySyncService
         private readonly FantasyTeamService $teamService,
         private readonly FantasyPlayerService $playerService,
         private readonly FantasyMarketService $marketService,
+        private readonly SquadListingService $squadListingService,
     ) {}
 
     /**
@@ -173,6 +176,89 @@ class FantasySyncService
         $account->update(['last_synced_at' => now(), 'current_matchday' => $currentMatchday ?? $account->current_matchday]);
 
         $this->syncStandings($account, $league);
+
+        try {
+            $this->syncTransactions($account);
+        } catch (\Throwable $e) {
+            Log::channel('fantasy_api')->warning('fantasy.sync.transactions_failed', ['message' => $e->getMessage()]);
+        }
+
+        // A no-op unless the user has turned FantasyTeam.auto_list_squad on
+        // (see SquadListingService) — listMissingPlayers() itself never
+        // throws out (each player's failure is caught and logged
+        // individually), this is just defense in depth.
+        try {
+            $this->squadListingService->listMissingPlayers($account);
+        } catch (\Throwable $e) {
+            Log::channel('fantasy_api')->warning('fantasy.sync.auto_list_squad_failed', ['message' => $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Backfills `purchase_price`/`acquired_at` on the account's own roster
+     * from the league activity feed — the only place LaLiga records what was
+     * actually paid for a player (see FantasyActivityDTO). Scans pages
+     * newest-first and stops as soon as every player currently on the
+     * roster has a match, so most runs only touch one page; a player who
+     * has been on the roster since before the activity feed's history (or
+     * since league creation, which isn't logged as a transfer at all)
+     * simply keeps `purchase_price = null` rather than guessing.
+     *
+     * @return int number of roster players whose purchase price was found
+     */
+    public function syncTransactions(FantasyAccount $account): int
+    {
+        $team = $account->activeTeam;
+        $league = $account->activeLeague;
+        $myManagerId = $account->fantasy_user_id;
+
+        if (! $team || ! $league || ! $myManagerId) {
+            return 0;
+        }
+
+        $pendingPlayerIds = $team->teamPlayers()->pluck('fantasy_player_id')->all();
+        $resolved = [];
+
+        for ($index = 0; $index < 50 && count($resolved) < count($pendingPlayerIds); $index++) {
+            $page = $this->leagueService->getActivity($account, $league->external_id, $index);
+
+            if (empty($page)) {
+                break;
+            }
+
+            foreach ($page as $dto) {
+                if (
+                    $dto->activityTypeId !== FantasyActivityDTO::TYPE_OWNERSHIP_TRANSFER
+                    || $dto->buyerExternalId !== $myManagerId
+                    || ! $dto->playerExternalId
+                    || $dto->amount === null
+                ) {
+                    continue;
+                }
+
+                $player = FantasyPlayer::firstWhere('external_id', $dto->playerExternalId);
+
+                if (! $player || ! in_array($player->id, $pendingPlayerIds, true) || isset($resolved[$player->id])) {
+                    continue;
+                }
+
+                // Pages come back newest-first, so the first match for a
+                // given player is already its most recent acquisition —
+                // relevant for a player bought, sold, then bought back.
+                $resolved[$player->id] = [
+                    'amount' => $dto->amount,
+                    'occurredAt' => $dto->occurredAt ? $this->parseDate($dto->occurredAt) : null,
+                ];
+            }
+        }
+
+        foreach ($resolved as $playerId => $purchase) {
+            FantasyTeamPlayer::where('fantasy_team_id', $team->id)
+                ->where('fantasy_player_id', $playerId)
+                ->update(['purchase_price' => $purchase['amount'], 'acquired_at' => $purchase['occurredAt']]);
+        }
+
+        return count($resolved);
     }
 
     /**

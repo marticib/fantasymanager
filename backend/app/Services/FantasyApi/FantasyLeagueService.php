@@ -3,6 +3,7 @@
 namespace App\Services\FantasyApi;
 
 use App\Models\FantasyAccount;
+use App\Services\FantasyApi\DTOs\FantasyActivityDTO;
 use App\Services\FantasyApi\DTOs\FantasyLeagueDTO;
 use App\Services\FantasyApi\DTOs\FantasyStandingDTO;
 use App\Services\FantasyApi\DTOs\FantasyUserDTO;
@@ -44,11 +45,17 @@ class FantasyLeagueService
         );
     }
 
+    /**
+     * @return FantasyActivityDTO[]
+     */
     public function getActivity(FantasyAccount $account, string $leagueId, int $index = 0): array
     {
         $data = $this->client->get($account, $this->competitionPath("/leagues/{$leagueId}/activity/{$index}"));
 
-        return $this->unwrapList($data);
+        return array_map(
+            fn (array $row) => FantasyActivityDTO::fromArray($row),
+            $this->unwrapList($data),
+        );
     }
 
     private function competitionPath(string $suffix): string

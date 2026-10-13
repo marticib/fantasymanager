@@ -41,7 +41,10 @@ Route::middleware('auth:sanctum')->group(function () {
     // Team
     Route::get('/team', [TeamController::class, 'show']);
     Route::get('/team/analysis', [TeamController::class, 'analysis']);
-    Route::get('/team/lineup', [TeamController::class, 'lineup']);
+    Route::get('/team/sales', [TeamController::class, 'sales']);
+    Route::put('/team/sales/auto-list', [TeamController::class, 'updateAutoListSquad']);
+    Route::post('/team/sales/{marketPlayer}/offers/{offerId}/accept', [TeamController::class, 'acceptSaleOffer']);
+    Route::post('/team/sales/{marketPlayer}/offers/{offerId}/reject', [TeamController::class, 'rejectSaleOffer']);
 
     // Market
     Route::get('/market', [MarketController::class, 'index']);
