@@ -360,7 +360,12 @@ export default function Market() {
       ),
       confirmLabel: 'Pujar oferta',
       run: async () => {
-        await apiClient.post(`/market/${row.id}/bid`, { amount: rounded })
+        const { data } = await apiClient.post(`/market/${row.id}/bid`, { amount: rounded })
+        // Update the list the instant the request succeeds rather than
+        // waiting on a full reload — /market only reflects fantasy:sync-market's
+        // last tick (minutes away), so without this the bid/cancel would
+        // otherwise seem to do nothing until that next tick.
+        setRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, myBid: data.myBid ?? { money: rounded } } : r)))
         return `Oferta ${label} de ${formatMoneyM(rounded)} enviada per ${row.player.name}.`
       },
     })
@@ -378,14 +383,14 @@ export default function Market() {
       confirmLabel: 'Cancel·lar oferta',
       run: async () => {
         await apiClient.delete(`/market/${row.id}/bid`)
+        setRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, myBid: null } : r)))
         return `Oferta cancel·lada per ${row.player.name}.`
       },
     })
   }
 
-  const handleModalClose = (wasSuccess) => {
+  const handleModalClose = () => {
     setPendingAction(null)
-    if (wasSuccess) load()
   }
 
   const myBids = useMemo(() => (rows || []).filter((r) => r.myBid), [rows])

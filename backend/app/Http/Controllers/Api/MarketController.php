@@ -267,7 +267,7 @@ class MarketController extends Controller
         }
 
         try {
-            $marketService->bid($account, $league->external_id, (string) $marketId, $amount);
+            $response = $marketService->bid($account, $league->external_id, (string) $marketId, $amount);
         } catch (FantasyApiException $e) {
             return response()->json([
                 'message' => 'LaLiga Fantasy ha rebutjat la puja.',
@@ -276,7 +276,20 @@ class MarketController extends Controller
             ], 422);
         }
 
-        return response()->json(['message' => 'Oferta enviada.', 'amount' => $amount]);
+        // Optimistic local update so this listing's `myBid` is correct the
+        // instant the UI re-reads it — otherwise it would stay stale until
+        // the next fantasy:sync-market tick (minutes away), which is what
+        // made placing/cancelling a bid feel like it "didn't work" before
+        // this. The bid's own id (needed later to cancel it) comes from
+        // whatever LaLiga's response body actually returns, best-effort
+        // (unconfirmed shape, never called before this feature either) —
+        // falls back to null, corrected for real on the next sync either way.
+        $myBid = ['id' => data_get($response, 'id') ?? data_get($response, 'bid.id'), 'money' => $amount];
+        $marketPlayer->forceFill([
+            'raw_payload' => array_merge($marketPlayer->raw_payload ?? [], ['bid' => array_merge($myBid, ['status' => 'pending'])]),
+        ])->save();
+
+        return response()->json(['message' => 'Oferta enviada.', 'amount' => $amount, 'myBid' => $myBid]);
     }
 
     /**
@@ -315,6 +328,12 @@ class MarketController extends Controller
                 'details' => $e->responseBody,
             ], 422);
         }
+
+        // Same reasoning as placeBid()'s optimistic update: clear it locally
+        // right away instead of waiting for the next fantasy:sync-market tick.
+        $payload = $marketPlayer->raw_payload ?? [];
+        unset($payload['bid']);
+        $marketPlayer->forceFill(['raw_payload' => $payload])->save();
 
         return response()->json(['message' => 'Oferta cancel·lada.']);
     }
