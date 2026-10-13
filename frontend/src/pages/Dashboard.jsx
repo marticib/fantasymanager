@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import apiClient from '../api/client'
 import TodayActionCard from '../components/TodayActionCard'
+import BidModal from '../components/BidModal'
 import { WarningIcon, RefreshIcon, CheckIcon } from '../components/Icons'
 import { formatFullDate, formatMoneyM, greeting, initials } from '../utils/format'
 
@@ -52,25 +53,30 @@ export default function Dashboard() {
   const [error, setError] = useState('')
   const [syncing, setSyncing] = useState(false)
   const [ordersNeedingConfirmation, setOrdersNeedingConfirmation] = useState([])
-  const [busyBidId, setBusyBidId] = useState(null)
-  const [bidNotice, setBidNotice] = useState('')
-  const [bidError, setBidError] = useState('')
+  const [pendingAction, setPendingAction] = useState(null)
 
-  const placeBid = async (action, amount, label) => {
+  const askBid = (action, amount, label) => {
     if (!amount || amount === 'DO_NOT_CHASE' || !action.marketPlayerId) return
     const rounded = Math.round(amount)
-    if (!window.confirm(`Pujar una oferta ${label} de ${formatMoneyM(rounded)} per ${action.player?.name}?`)) return
-    setBidError('')
-    setBidNotice('')
-    setBusyBidId(action.marketPlayerId)
-    try {
-      await apiClient.post(`/market/${action.marketPlayerId}/bid`, { amount: rounded })
-      setBidNotice(`Oferta ${label} de ${formatMoneyM(rounded)} enviada per ${action.player?.name}.`)
-    } catch (err) {
-      setBidError(err.response?.data?.message || 'No s\'ha pogut enviar la puja.')
-    } finally {
-      setBusyBidId(null)
-    }
+    setPendingAction({
+      title: 'Confirmar oferta',
+      description: (
+        <>
+          Pujar <span className="num font-semibold text-foreground">{formatMoneyM(rounded)}</span> ({label}) per{' '}
+          <span className="font-semibold text-foreground">{action.player?.name}</span>?
+        </>
+      ),
+      confirmLabel: 'Pujar oferta',
+      run: async () => {
+        await apiClient.post(`/market/${action.marketPlayerId}/bid`, { amount: rounded })
+        return `Oferta ${label} de ${formatMoneyM(rounded)} enviada per ${action.player?.name}.`
+      },
+    })
+  }
+
+  const handleModalClose = (wasSuccess) => {
+    setPendingAction(null)
+    if (wasSuccess) load()
   }
 
   const load = () => {
@@ -120,6 +126,8 @@ export default function Dashboard() {
 
   return (
     <div>
+      <BidModal request={pendingAction} onClose={handleModalClose} />
+
       <p className="text-sm text-muted-foreground">{greeting()} 👋</p>
       <h1 className="mt-1 text-3xl font-bold tracking-tight">Avui</h1>
       <p className="mt-1 text-sm text-muted-foreground">
@@ -127,9 +135,6 @@ export default function Dashboard() {
         {data.currentMatchday ? ` · Jornada ${data.currentMatchday}` : ''}
         {today && !today.nothingToDoToday ? ` · ${today.summary}` : ''}
       </p>
-
-      {bidNotice && <p className="mt-3 text-sm text-bull">{bidNotice}</p>}
-      {bidError && <p className="mt-3 text-sm text-bear">{bidError}</p>}
 
       {ordersNeedingConfirmation.length > 0 && (
         <div className="mt-5 rounded-xl border border-info/30 bg-info/10 px-5 py-4">
@@ -195,12 +200,7 @@ export default function Dashboard() {
               <p className="text-sm text-muted-foreground">Accions que realment s'han de fer avui.</p>
               <div className="mt-4 grid grid-cols-1 gap-5 lg:grid-cols-3">
                 {actions.urgent.map((action, i) => (
-                  <TodayActionCard
-                    key={`${action.type}-${action.player?.id}-${i}`}
-                    action={action}
-                    onBid={placeBid}
-                    busy={busyBidId === action.marketPlayerId}
-                  />
+                  <TodayActionCard key={`${action.type}-${action.player?.id}-${i}`} action={action} onBid={askBid} />
                 ))}
               </div>
             </div>
@@ -212,12 +212,7 @@ export default function Dashboard() {
               <p className="text-sm text-muted-foreground">Operacions interessants però no necessàriament urgents.</p>
               <div className="mt-4 grid grid-cols-1 gap-5 lg:grid-cols-3">
                 {actions.opportunity.map((action, i) => (
-                  <TodayActionCard
-                    key={`${action.type}-${action.player?.id}-${i}`}
-                    action={action}
-                    onBid={placeBid}
-                    busy={busyBidId === action.marketPlayerId}
-                  />
+                  <TodayActionCard key={`${action.type}-${action.player?.id}-${i}`} action={action} onBid={askBid} />
                 ))}
               </div>
             </div>

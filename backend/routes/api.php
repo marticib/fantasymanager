@@ -51,6 +51,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/market/opportunities', [MarketController::class, 'opportunities']);
     Route::get('/market/{marketPlayer}/buy-analysis', [MarketController::class, 'buyAnalysis']);
     Route::post('/market/{marketPlayer}/bid', [MarketController::class, 'placeBid']);
+    Route::delete('/market/{marketPlayer}/bid', [MarketController::class, 'cancelBid']);
 
     // Players
     Route::get('/players', [PlayerController::class, 'index']);

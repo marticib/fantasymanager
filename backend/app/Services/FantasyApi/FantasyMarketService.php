@@ -97,17 +97,21 @@ class FantasyMarketService
         return $this->client->post($account, $this->competitionPath("/league/{$leagueId}/market/{$marketId}/bid"), ['money' => $amount]);
     }
 
+    /**
+     * Cancels your own bid on a listing (MarketController::cancelBid()).
+     * Shape confirmed the same way as the other write actions.
+     */
+    public function cancelBid(FantasyAccount $account, string $leagueId, string $marketId, string $bidId): array
+    {
+        return $this->client->delete($account, $this->competitionPath("/league/{$leagueId}/market/{$marketId}/bid/{$bidId}/cancel"));
+    }
+
     // --- The following are write operations. They are intentionally left as
     // thin, explicit wrappers (never called automatically by the sync/recommendation
     // pipeline) so a future "act on this recommendation" button has a safe,
     // already-abstracted place to call into — but nothing in this codebase
     // invokes them yet. The app is read-only until a human wires up a UI
     // action to one of these. ---
-
-    public function cancelBid(FantasyAccount $account, string $leagueId, string $marketId, string $bidId): array
-    {
-        return $this->client->delete($account, $this->competitionPath("/league/{$leagueId}/market/{$marketId}/bid/{$bidId}/cancel"));
-    }
 
     public function withdrawFromMarket(FantasyAccount $account, string $leagueId, string $marketId): array
     {

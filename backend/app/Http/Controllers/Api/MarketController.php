@@ -94,6 +94,18 @@ class MarketController extends Controller
                 [$value1d, $value3d, $value7d] = $trendCalculator->historicalValues($listing->player, (float) $marketValue, $externalTrend);
                 $bidCount = $listing->raw_payload['numberOfOffers'] ?? null;
 
+                // Your own active bid on this listing, if any — confirmed
+                // against the same community client as the other write
+                // actions: a `bid: {id, money, status}` object appears
+                // embedded directly in this same market listing payload for
+                // whichever manager currently holds it, nothing extra to
+                // fetch. Only as fresh as the last fantasy:sync-market run.
+                $myBidId = data_get($listing->raw_payload, 'bid.id');
+                $myBid = $myBidId ? [
+                    'id' => (string) $myBidId,
+                    'money' => data_get($listing->raw_payload, 'bid.money'),
+                ] : null;
+
                 $buyAnalysis = $buyAnalysisService->analyze(
                     currentMarketValue: (float) $marketValue,
                     acquisitionPrice: $acquisitionPrice,
@@ -135,6 +147,7 @@ class MarketController extends Controller
                     'actionSource' => $p->effectiveSource,
                     'recommendedBid' => (int) round($marketValue * 1.03),
                     'maxBid' => $maxBid,
+                    'myBid' => $myBid,
                     'buyAnalysis' => $buyAnalysis->toArray(),
                     'history' => $p->history,
                     'historySource' => $p->historySource,
@@ -264,6 +277,46 @@ class MarketController extends Controller
         }
 
         return response()->json(['message' => 'Oferta enviada.', 'amount' => $amount]);
+    }
+
+    /**
+     * Cancels your own active bid on a listing (FantasyMarketService::cancelBid()).
+     * Both the listing id and your bid id come from the last synced copy of
+     * the listing (`raw_payload.id` / `raw_payload.bid.id`) — there's no
+     * separate "my bids" read endpoint to re-check live against, unlike
+     * accept/rejectOffer(). If the cached bid id is missing or LaLiga no
+     * longer recognizes it (already outbid, already cancelled elsewhere),
+     * this fails clearly rather than silently succeeding.
+     */
+    public function cancelBid(Request $request, FantasyMarketPlayer $marketPlayer, FantasyMarketService $marketService)
+    {
+        $account = $this->currentAccount($request);
+        $league = $account->activeLeague;
+
+        if (! $league || $marketPlayer->fantasy_league_id !== $league->id) {
+            return response()->json(['message' => 'Listing not found.'], 404);
+        }
+
+        $marketId = data_get($marketPlayer->raw_payload, 'id');
+        $bidId = data_get($marketPlayer->raw_payload, 'bid.id');
+
+        if (! $marketId || ! $bidId) {
+            return response()->json([
+                'message' => 'No hi ha cap oferta teva activa per cancel·lar en aquest jugador (potser les dades estan desactualitzades — prova de sincronitzar).',
+            ], 404);
+        }
+
+        try {
+            $marketService->cancelBid($account, $league->external_id, (string) $marketId, (string) $bidId);
+        } catch (FantasyApiException $e) {
+            return response()->json([
+                'message' => 'LaLiga Fantasy ha rebutjat cancel·lar l\'oferta.',
+                'error' => $e->getMessage(),
+                'details' => $e->responseBody,
+            ], 422);
+        }
+
+        return response()->json(['message' => 'Oferta cancel·lada.']);
     }
 
     public function opportunities(Request $request)

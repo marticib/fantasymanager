@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import apiClient from '../api/client'
 import ScoreRing from '../components/ScoreRing'
 import Sparkline from '../components/Sparkline'
+import BidModal from '../components/BidModal'
 import { ShopIcon, ArrowRightIcon, ChevronDownIcon } from '../components/Icons'
 import { formatMoneyM, formatDelta, formatPercent, formatCountdown, POSITION_LABELS, initials } from '../utils/format'
 
@@ -79,7 +80,7 @@ function BuyStat({ label, value, colorClass, onBid, busy }) {
   )
 }
 
-function MarketRow({ row, onBid, busyBidRowId }) {
+function MarketRow({ row, onBid, onCancelBid }) {
   const [open, setOpen] = useState(false)
   const b = row.buyAnalysis
 
@@ -114,6 +115,9 @@ function MarketRow({ row, onBid, busyBidRowId }) {
             <div className="min-w-0">
               <p className="truncate font-medium">{row.player.name}</p>
               <p className="truncate text-xs text-muted-foreground">{row.player.clubShort || row.player.club || '—'}</p>
+              {row.myBid && (
+                <p className="num truncate text-[11px] font-semibold text-primary">La teva oferta: {formatMoneyM(row.myBid.money)}</p>
+              )}
             </div>
           </Link>
         </td>
@@ -175,7 +179,7 @@ function MarketRow({ row, onBid, busyBidRowId }) {
       {open && b && (
         <tr className="border-b border-border bg-background/40 last:border-0">
           <td colSpan={11} className="px-4 py-4">
-            <BuyAnalysisDetail row={row} b={b} onBid={onBid} busy={busyBidRowId === row.id} />
+            <BuyAnalysisDetail row={row} b={b} onBid={onBid} onCancelBid={onCancelBid} />
           </td>
         </tr>
       )}
@@ -183,7 +187,7 @@ function MarketRow({ row, onBid, busyBidRowId }) {
   )
 }
 
-function BuyAnalysisDetail({ row, b, onBid, busy }) {
+function BuyAnalysisDetail({ row, b, onBid, onCancelBid }) {
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_auto]">
       <div>
@@ -206,33 +210,42 @@ function BuyAnalysisDetail({ row, b, onBid, busy }) {
           {b.bidCount != null && ` · ${b.bidCount} ofertes en aquesta subhasta`} · dades {b.dataQuality}%.
         </p>
       </div>
-      <div className="flex shrink-0 gap-5 border-t border-border pt-3 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-5">
+      <div className="flex shrink-0 flex-wrap gap-5 border-t border-border pt-3 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-5">
         <BuyStat label="Score" value={b.buyEconomicScore} colorClass="text-primary" />
         <BuyStat
           label="Valor"
           value={formatMoneyM(row.marketValue)}
           onBid={onBid && (() => onBid(row, row.marketValue, 'al valor actual'))}
-          busy={busy}
         />
         <BuyStat
           label="Màxim"
           value={formatMoneyM(b.maxBid)}
           onBid={onBid && (() => onBid(row, b.maxBid, 'màxima'))}
-          busy={busy}
         />
         <BuyStat
           label="Oferta"
           value={b.recommendedBid === 'DO_NOT_CHASE' ? 'No perseguir' : formatMoneyM(b.recommendedBid)}
           colorClass={b.recommendedBid === 'DO_NOT_CHASE' ? 'text-bear' : 'text-bull'}
           onBid={onBid && b.recommendedBid !== 'DO_NOT_CHASE' && (() => onBid(row, b.recommendedBid, 'recomanada'))}
-          busy={busy}
         />
+        {row.myBid && (
+          <div className="text-center">
+            <p className="num text-lg font-bold text-primary">{formatMoneyM(row.myBid.money)}</p>
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">La teva oferta</p>
+            <button
+              onClick={() => onCancelBid(row)}
+              className="mt-1.5 rounded-md border border-border px-2 py-1 text-[11px] font-semibold text-muted-foreground hover:border-bear hover:text-bear"
+            >
+              Cancel·lar
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )
 }
 
-function MarketCard({ row, onBid, busyBidRowId }) {
+function MarketCard({ row, onBid, onCancelBid }) {
   const [open, setOpen] = useState(false)
   const b = row.buyAnalysis
   const own = row.trend?.change24h
@@ -251,6 +264,9 @@ function MarketCard({ row, onBid, busyBidRowId }) {
             <p className="truncate text-xs text-muted-foreground">
               {row.player.clubShort || row.player.club || '—'} · {POSITION_LABELS[row.player.position] || row.player.position}
             </p>
+            {row.myBid && (
+              <p className="num truncate text-[11px] font-semibold text-primary">La teva oferta: {formatMoneyM(row.myBid.money)}</p>
+            )}
           </div>
         </div>
         <span className={`num shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${scoreBadgeClass(row.fantasyScore)}`}>
@@ -297,7 +313,7 @@ function MarketCard({ row, onBid, busyBidRowId }) {
 
       {open && b && (
         <div className="mt-3 border-t border-border pt-3">
-          <BuyAnalysisDetail row={row} b={b} onBid={onBid} busy={busyBidRowId === row.id} />
+          <BuyAnalysisDetail row={row} b={b} onBid={onBid} onCancelBid={onCancelBid} />
         </div>
       )}
     </div>
@@ -317,9 +333,7 @@ export default function Market() {
   const [freeAgentOnly, setFreeAgentOnly] = useState(true)
   const [sort, setSort] = useState({ key: 'fantasyScore', direction: 'desc' })
 
-  const [busyBidRowId, setBusyBidRowId] = useState(null)
-  const [bidNotice, setBidNotice] = useState('')
-  const [bidError, setBidError] = useState('')
+  const [pendingAction, setPendingAction] = useState(null)
 
   const load = () => {
     apiClient
@@ -333,22 +347,48 @@ export default function Market() {
 
   useEffect(load, [])
 
-  const placeBid = async (row, amount, label) => {
+  const askBid = (row, amount, label) => {
     if (!amount || amount === 'DO_NOT_CHASE') return
     const rounded = Math.round(amount)
-    if (!window.confirm(`Pujar una oferta ${label} de ${formatMoneyM(rounded)} per ${row.player.name}?`)) return
-    setBidError('')
-    setBidNotice('')
-    setBusyBidRowId(row.id)
-    try {
-      await apiClient.post(`/market/${row.id}/bid`, { amount: rounded })
-      setBidNotice(`Oferta ${label} de ${formatMoneyM(rounded)} enviada per ${row.player.name}.`)
-    } catch (err) {
-      setBidError(err.response?.data?.message || 'No s\'ha pogut enviar la puja.')
-    } finally {
-      setBusyBidRowId(null)
-    }
+    setPendingAction({
+      title: 'Confirmar oferta',
+      description: (
+        <>
+          Pujar <span className="num font-semibold text-foreground">{formatMoneyM(rounded)}</span> ({label}) per{' '}
+          <span className="font-semibold text-foreground">{row.player.name}</span>?
+        </>
+      ),
+      confirmLabel: 'Pujar oferta',
+      run: async () => {
+        await apiClient.post(`/market/${row.id}/bid`, { amount: rounded })
+        return `Oferta ${label} de ${formatMoneyM(rounded)} enviada per ${row.player.name}.`
+      },
+    })
   }
+
+  const askCancelBid = (row) => {
+    setPendingAction({
+      title: 'Cancel·lar oferta',
+      description: (
+        <>
+          Cancel·lar la teva oferta de <span className="num font-semibold text-foreground">{formatMoneyM(row.myBid.money)}</span> per{' '}
+          <span className="font-semibold text-foreground">{row.player.name}</span>?
+        </>
+      ),
+      confirmLabel: 'Cancel·lar oferta',
+      run: async () => {
+        await apiClient.delete(`/market/${row.id}/bid`)
+        return `Oferta cancel·lada per ${row.player.name}.`
+      },
+    })
+  }
+
+  const handleModalClose = (wasSuccess) => {
+    setPendingAction(null)
+    if (wasSuccess) load()
+  }
+
+  const myBids = useMemo(() => (rows || []).filter((r) => r.myBid), [rows])
 
   const filtered = useMemo(() => {
     if (!rows) return []
@@ -391,8 +431,31 @@ export default function Market() {
 
   return (
     <div>
-      {bidNotice && <p className="mb-3 text-sm text-bull">{bidNotice}</p>}
-      {bidError && <p className="mb-3 text-sm text-bear">{bidError}</p>}
+      <BidModal request={pendingAction} onClose={handleModalClose} />
+
+      {myBids.length > 0 && (
+        <div className="mb-5 rounded-2xl border border-primary/30 bg-primary/5 p-4">
+          <p className="text-sm font-semibold">
+            Les teves ofertes actives ({myBids.length})
+          </p>
+          <div className="mt-3 space-y-2">
+            {myBids.map((row) => (
+              <div key={row.id} className="flex items-center justify-between gap-3 rounded-lg border border-border bg-surface px-3 py-2">
+                <Link to={`/players/${row.player.id}`} className="min-w-0 flex-1 truncate text-sm font-medium hover:text-primary">
+                  {row.player.name}
+                </Link>
+                <span className="num shrink-0 text-sm font-semibold text-primary">{formatMoneyM(row.myBid.money)}</span>
+                <button
+                  onClick={() => askCancelBid(row)}
+                  className="shrink-0 rounded-md border border-border px-2 py-1 text-xs font-semibold text-muted-foreground hover:border-bear hover:text-bear"
+                >
+                  Cancel·lar
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
@@ -437,9 +500,8 @@ export default function Market() {
                 )
               )}
               <button
-                onClick={() => placeBid(top, top.marketValue, 'al valor actual')}
-                disabled={busyBidRowId === top.id}
-                className="rounded-md border border-border px-2 py-1 text-xs font-semibold text-muted-foreground hover:border-bull hover:text-bull disabled:opacity-50"
+                onClick={() => askBid(top, top.marketValue, 'al valor actual')}
+                className="rounded-md border border-border px-2 py-1 text-xs font-semibold text-muted-foreground hover:border-bull hover:text-bull"
               >
                 Pujar al valor
               </button>
@@ -461,9 +523,8 @@ export default function Market() {
               <p className="text-[11px] font-semibold uppercase tracking-wide text-bull/80">Oferta recomanada</p>
               <p className="num mt-1 text-xl font-bold text-bull">{formatMoneyM(top.recommendedBid)}</p>
               <button
-                onClick={() => placeBid(top, top.recommendedBid, 'recomanada')}
-                disabled={busyBidRowId === top.id}
-                className="mt-2 w-full rounded-md bg-bull/20 py-1 text-xs font-semibold text-bull hover:bg-bull/30 disabled:opacity-50"
+                onClick={() => askBid(top, top.recommendedBid, 'recomanada')}
+                className="mt-2 w-full rounded-md bg-bull/20 py-1 text-xs font-semibold text-bull hover:bg-bull/30"
               >
                 Pujar
               </button>
@@ -472,9 +533,8 @@ export default function Market() {
               <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Màxim</p>
               <p className="num mt-1 text-xl font-bold">{formatMoneyM(top.maxBid)}</p>
               <button
-                onClick={() => placeBid(top, top.maxBid, 'màxima')}
-                disabled={busyBidRowId === top.id}
-                className="mt-2 w-full rounded-md border border-border py-1 text-xs font-semibold text-muted-foreground hover:border-bull hover:text-bull disabled:opacity-50"
+                onClick={() => askBid(top, top.maxBid, 'màxima')}
+                className="mt-2 w-full rounded-md border border-border py-1 text-xs font-semibold text-muted-foreground hover:border-bull hover:text-bull"
               >
                 Pujar
               </button>
@@ -606,7 +666,7 @@ export default function Market() {
           </thead>
           <tbody>
             {sorted.map((row) => (
-              <MarketRow key={row.id} row={row} onBid={placeBid} busyBidRowId={busyBidRowId} />
+              <MarketRow key={row.id} row={row} onBid={askBid} onCancelBid={askCancelBid} />
             ))}
           </tbody>
         </table>
@@ -615,7 +675,7 @@ export default function Market() {
 
       <div className="mt-4 space-y-3 md:hidden">
         {sorted.map((row) => (
-          <MarketCard key={row.id} row={row} onBid={placeBid} busyBidRowId={busyBidRowId} />
+          <MarketCard key={row.id} row={row} onBid={askBid} onCancelBid={askCancelBid} />
         ))}
         {sorted.length === 0 && <p className="panel p-6 text-center text-sm text-muted-foreground">Cap jugador amb aquests filtres.</p>}
       </div>
