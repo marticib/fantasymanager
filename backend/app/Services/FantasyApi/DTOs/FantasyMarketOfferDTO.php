@@ -4,13 +4,13 @@ namespace App\Services\FantasyApi\DTOs;
 
 /**
  * One pending offer on a player you've listed for sale, from
- * `/league/{id}/playerTeam/{playerTeamId}/offer`. This account has never had
- * a real offer to observe directly, so these field names are cross-checked
- * instead against a community-maintained client hitting the same LaLiga
- * Fantasy API (Externoak/LaLigaApp, which also calls `/offer/{id}/accept`
- * and `/offer/{id}/reject` the same way FantasyMarketService does) —
- * `id`, `money` and `status` ("pending" while actionable) all confirmed
- * there, not guessed from scratch.
+ * `/league/{id}/playerTeam/{playerTeamId}/offer`. Confirmed live on a real
+ * non-empty response (2026-10-14): `{id, money, status, createdAt, updatedAt,
+ * isFromMarket, expirationDate}`. `isFromMarket: true` is the market's own
+ * standing offer (LaLiga auto-bids close to current market value on listed
+ * players that nobody else has bid on yet) — not a competing manager's real
+ * offer, even though it goes through the exact same accept/reject flow. The
+ * UI must say which kind this is rather than presenting both the same way.
  */
 class FantasyMarketOfferDTO extends BaseFantasyDTO
 {
@@ -21,6 +21,7 @@ class FantasyMarketOfferDTO extends BaseFantasyDTO
         public readonly ?int $money,
         public readonly ?string $status,
         public readonly ?string $expiresAt,
+        public readonly ?bool $isFromMarket,
         public readonly array $raw,
     ) {}
 
@@ -31,6 +32,7 @@ class FantasyMarketOfferDTO extends BaseFantasyDTO
             money: self::firstInt($data, ['money', 'amount']),
             status: self::firstString($data, ['status']),
             expiresAt: self::firstString($data, ['expirationDate', 'expiresAt']),
+            isFromMarket: self::firstBool($data, ['isFromMarket']),
             raw: $data,
         );
     }

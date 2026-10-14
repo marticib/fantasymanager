@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import apiClient from '../api/client'
-import { formatMoneyM, formatDelta, formatPercent, formatCountdown, POSITION_LABELS, initials } from '../utils/format'
+import { formatMoney, formatDelta, formatPercent, formatCountdown, POSITION_LABELS, initials } from '../utils/format'
 
 function profitClass(value) {
   if (value === null || value === undefined) return 'text-muted-foreground'
@@ -10,10 +10,27 @@ function profitClass(value) {
   return 'text-muted-foreground'
 }
 
+// Full precision, signed — formatMoneyCompact/formatDelta round to k/M, which
+// is exactly what hid that these offers were real (if close-looking) numbers.
+function formatSignedFull(value) {
+  if (value === null || value === undefined) return '—'
+  return (value > 0 ? '+' : '') + formatMoney(value)
+}
+
 function offerSummaryLabel(row) {
-  if (row.marketOffer !== null) return formatMoneyM(row.marketOffer)
+  if (row.marketOffer !== null) return formatMoney(row.marketOffer)
   if (row.offersCheckFailed) return 'No s\'ha pogut comprovar'
   return 'Sense ofertes'
+}
+
+// Confirmed live: LaLiga auto-bids close to market value on a listed player
+// nobody else has bid on yet — not a rival manager's real offer, even though
+// it goes through the same accept/reject flow. Must never look like someone
+// actually wants to buy when it's just this standing market bid.
+function offerSourceLabel(isFromMarket) {
+  if (isFromMarket === true) return 'oferta estàndard del mercat, no d\'un mànager'
+  if (isFromMarket === false) return 'oferta d\'un altre mànager'
+  return null
 }
 
 function OffersList({ row, busyOfferId, onAccept, onReject }) {
@@ -24,8 +41,13 @@ function OffersList({ row, busyOfferId, onAccept, onReject }) {
       {row.offers.map((offer) => (
         <div key={offer.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-surface-raised px-2.5 py-1.5">
           <div className="text-xs">
-            <span className="num font-semibold">{formatMoneyM(offer.money)}</span>
+            <span className="num font-semibold">{formatMoney(offer.money)}</span>
             {formatCountdown(offer.expiresAt) && <span className="ml-1.5 text-muted-foreground">caduca en {formatCountdown(offer.expiresAt)}</span>}
+            {offerSourceLabel(offer.isFromMarket) && (
+              <span className={`ml-1.5 ${offer.isFromMarket ? 'text-muted-foreground' : 'font-semibold text-bull'}`}>
+                · {offerSourceLabel(offer.isFromMarket)}
+              </span>
+            )}
           </div>
           <div className="flex gap-1.5">
             <button
@@ -67,7 +89,7 @@ function SaleCard({ row, busyOfferId, onAccept, onReject }) {
       <div className="mt-3 flex items-end justify-between gap-3">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Preu de venda</p>
-          <p className="num text-xl font-bold">{formatMoneyM(row.salePrice)}</p>
+          <p className="num text-lg font-bold">{formatMoney(row.salePrice)}</p>
         </div>
         <div className="text-right">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Oferta del mercat</p>
@@ -77,20 +99,25 @@ function SaleCard({ row, busyOfferId, onAccept, onReject }) {
           >
             {offerSummaryLabel(row)}
           </p>
+          {offerSourceLabel(row.marketOfferIsFromMarket) && (
+            <p className={`text-[10px] ${row.marketOfferIsFromMarket ? 'text-muted-foreground' : 'font-semibold text-bull'}`}>
+              {offerSourceLabel(row.marketOfferIsFromMarket)}
+            </p>
+          )}
         </div>
       </div>
 
       <OffersList row={row} busyOfferId={busyOfferId} onAccept={onAccept} onReject={onReject} />
 
       <div className="mt-3 flex items-center justify-between border-t border-border pt-3 text-xs text-muted-foreground">
-        <span>Comprat per {row.purchasePrice !== null ? formatMoneyM(row.purchasePrice) : '—'}</span>
+        <span>Comprat per {row.purchasePrice !== null ? formatMoney(row.purchasePrice) : '—'}</span>
         <span>{formatCountdown(row.expiresAt) ? `Caduca en ${formatCountdown(row.expiresAt)}` : '—'}</span>
       </div>
 
       <div className="mt-2 flex items-center justify-between text-xs">
         <span className="text-muted-foreground">Guany/Pèrdua</span>
         <span className={`num font-semibold ${profitClass(row.profit)}`}>
-          {row.profit !== null ? `${formatDelta(row.profit)} (${formatPercent(row.profitPct)})` : '—'}
+          {row.profit !== null ? `${formatSignedFull(row.profit)} (${formatPercent(row.profitPct)})` : '—'}
         </span>
       </div>
     </div>
@@ -144,7 +171,7 @@ export default function Sales() {
   }
 
   const handleAccept = async (row, offer) => {
-    if (!window.confirm(`Acceptar l'oferta de ${formatMoneyM(offer.money)} per ${row.player.name}? Es vendrà el jugador ara mateix.`)) return
+    if (!window.confirm(`Acceptar l'oferta de ${formatMoney(offer.money)} per ${row.player.name}? Es vendrà el jugador ara mateix.`)) return
     setActionError('')
     setBusyOfferId(offer.id)
     try {
@@ -158,7 +185,7 @@ export default function Sales() {
   }
 
   const handleReject = async (row, offer) => {
-    if (!window.confirm(`Rebutjar l'oferta de ${formatMoneyM(offer.money)} per ${row.player.name}?`)) return
+    if (!window.confirm(`Rebutjar l'oferta de ${formatMoney(offer.money)} per ${row.player.name}?`)) return
     setActionError('')
     setBusyOfferId(offer.id)
     try {
@@ -227,10 +254,12 @@ export default function Sales() {
       )}
 
       <p className="mt-4 text-xs text-muted-foreground">
-        «Preu de venda» és el que tu vas demanar en posar-lo al mercat, no una oferta de ningú. L'«Oferta del mercat» només apareix quan un
-        altre mànager hi ha pujat de debò una oferta — si encara no n'hi ha cap, surt «Sense ofertes» i el guany/pèrdua es queda en «—» (no
-        s'ha venut res encara, no hi ha res a calcular). El preu de compra ve de l'historial d'activitat de la lliga i només es coneix des
-        que en tenim registre — si vas fitxar un jugador abans d'això (p. ex. a l'assignació inicial), també es queda en «—».
+        «Preu de venda» és el que tu vas demanar en posar-lo al mercat, no una oferta de ningú. L'«Oferta del mercat» només apareix quan hi
+        ha una oferta real pendent — si encara no n'hi ha cap, surt «Sense ofertes» i el guany/pèrdua es queda en «—» (no s'ha venut res
+        encara, no hi ha res a calcular). La majoria d'ofertes són l'«oferta estàndard del mercat»: LaLiga en genera una automàticament, a
+        prop del valor de mercat, per a qualsevol jugador en venda que encara ningú no ha pujat — no és un mànager rival volent comprar-lo,
+        encara que es puja/rebutja igual. El preu de compra ve de l'historial d'activitat de la lliga i només es coneix des que en tenim
+        registre — si vas fitxar un jugador abans d'això (p. ex. a l'assignació inicial), també es queda en «—».
       </p>
 
       <div className="mt-4 hidden overflow-x-auto rounded-xl border border-border bg-surface md:block">
@@ -245,7 +274,10 @@ export default function Sales() {
               <th className="px-4 py-3" title="Preu que tu vas demanar en posar-lo al mercat — no és una oferta de ningú">
                 Preu de venda
               </th>
-              <th className="px-4 py-3" title="Ofertes reals rebudes d'altres mànagers — «Sense ofertes» si encara no n'hi ha cap">
+              <th
+                className="px-4 py-3"
+                title="Oferta real pendent — sovint l'estàndard del mercat (automàtica, no d'un mànager) — «Sense ofertes» si encara no n'hi ha cap"
+              >
                 Oferta del mercat
               </th>
               <th className="px-4 py-3" title="El que vas pagar per aquest jugador, segons l'historial d'activitat de la lliga">
@@ -276,8 +308,8 @@ export default function Sales() {
                     {POSITION_LABELS[row.player.position] || row.player.position}
                   </span>
                 </td>
-                <td className="px-4 py-3 font-medium">{formatMoneyM(row.marketValue)}</td>
-                <td className="px-4 py-3 text-muted-foreground">{formatMoneyM(row.salePrice)}</td>
+                <td className="px-4 py-3 font-medium">{formatMoney(row.marketValue)}</td>
+                <td className="px-4 py-3 text-muted-foreground">{formatMoney(row.salePrice)}</td>
                 <td className="px-4 py-3">
                   <span
                     className={`font-semibold ${row.marketOffer !== null ? '' : 'text-muted-foreground'}`}
@@ -285,11 +317,16 @@ export default function Sales() {
                   >
                     {offerSummaryLabel(row)}
                   </span>
+                  {offerSourceLabel(row.marketOfferIsFromMarket) && (
+                    <p className={`text-[10px] ${row.marketOfferIsFromMarket ? 'text-muted-foreground' : 'font-semibold text-bull'}`}>
+                      {offerSourceLabel(row.marketOfferIsFromMarket)}
+                    </p>
+                  )}
                   <OffersList row={row} busyOfferId={busyOfferId} onAccept={handleAccept} onReject={handleReject} />
                 </td>
-                <td className="px-4 py-3 text-muted-foreground">{row.purchasePrice !== null ? formatMoneyM(row.purchasePrice) : '—'}</td>
+                <td className="px-4 py-3 text-muted-foreground">{row.purchasePrice !== null ? formatMoney(row.purchasePrice) : '—'}</td>
                 <td className={`px-4 py-3 font-medium ${profitClass(row.profit)}`}>
-                  {row.profit !== null ? `${formatDelta(row.profit)} (${formatPercent(row.profitPct)})` : '—'}
+                  {row.profit !== null ? `${formatSignedFull(row.profit)} (${formatPercent(row.profitPct)})` : '—'}
                 </td>
                 <td className="px-4 py-3 text-xs text-muted-foreground">
                   {formatCountdown(row.expiresAt) ? `${formatCountdown(row.expiresAt)}` : '—'}

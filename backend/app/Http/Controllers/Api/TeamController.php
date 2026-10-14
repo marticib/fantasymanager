@@ -239,7 +239,8 @@ class TeamController extends Controller
                 $numberOfOffers = (int) ($listing->raw_payload['numberOfOffers'] ?? 0);
                 $fetch = $numberOfOffers > 0 ? $this->fetchOffers($listing, $marketService, $account, $league) : ['offers' => [], 'failed' => false];
                 $pending = collect($fetch['offers'])->filter(fn (FantasyMarketOfferDTO $o) => in_array($o->status, [null, FantasyMarketOfferDTO::STATUS_PENDING], true) && $o->money !== null);
-                $marketOffer = $pending->isNotEmpty() ? $pending->max('money') : null;
+                $best = $pending->sortByDesc('money')->first();
+                $marketOffer = $best?->money;
 
                 $profit = ($purchasePrice !== null && $marketOffer !== null) ? $marketOffer - $purchasePrice : null;
                 $profitPct = ($profit !== null && $purchasePrice > 0) ? round(($profit / $purchasePrice) * 100, 1) : null;
@@ -251,6 +252,13 @@ class TeamController extends Controller
                     'salePrice' => $listing->asking_price,
                     'numberOfOffers' => $numberOfOffers,
                     'marketOffer' => $marketOffer,
+                    // LaLiga auto-bids close to market value on a listed
+                    // player nobody else has bid on yet (confirmed live, see
+                    // FantasyMarketOfferDTO) — true here means $marketOffer is
+                    // that standing market bid, not a rival manager's real
+                    // offer, even though it's accepted/rejected the same way.
+                    // The UI must say which kind it is, not just a number.
+                    'marketOfferIsFromMarket' => $best?->isFromMarket,
                     // True when the listing's cached data said there should be
                     // at least one offer but the live lookup to confirm it
                     // failed (typically a stale playerTeamId — see
@@ -263,6 +271,7 @@ class TeamController extends Controller
                         'id' => $o->id,
                         'money' => $o->money,
                         'expiresAt' => $o->expiresAt,
+                        'isFromMarket' => $o->isFromMarket,
                     ])->values(),
                     'purchasePrice' => $purchasePrice,
                     'profit' => $profit,
