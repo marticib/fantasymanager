@@ -7,6 +7,7 @@ use App\Http\Resources\FantasyPlayerResource;
 use App\Http\Resources\FantasyTeamResource;
 use App\Models\FantasyExternalTrend;
 use App\Models\FantasyMarketPlayer;
+use App\Models\FantasyPlayer;
 use App\Models\FantasyTeam;
 use App\Services\Automation\SquadListingService;
 use App\Services\FantasyApi\DTOs\FantasyMarketOfferDTO;
@@ -43,7 +44,7 @@ class TeamController extends Controller
         $externalTrends = FantasyExternalTrend::where('source', 'futbolfantasy')->get()->keyBy('fantasy_player_id');
         $decisions = $decisionEngine->evaluateRoster($account);
 
-        $players = $team->teamPlayers()->with('player')->get()
+        $players = $team->teamPlayers()->with(['player.snapshots' => FantasyPlayer::valueSnapshotsConstraint()])->get()
             ->map(function ($tp) use ($account, $externalTrends, $presenter, $decisions) {
                 if (! $tp->player) {
                     return null;
@@ -114,7 +115,7 @@ class TeamController extends Controller
 
         $externalTrends = FantasyExternalTrend::where('source', 'futbolfantasy')->get()->keyBy('fantasy_player_id');
 
-        $players = $team->teamPlayers()->with('player')->get()
+        $players = $team->teamPlayers()->with(['player.snapshots' => FantasyPlayer::valueSnapshotsConstraint()])->get()
             ->map(function ($tp) use ($account, $externalTrends, $presenter, $rivalClausePresenter) {
                 if (! $tp->player) {
                     return null;
@@ -227,17 +228,24 @@ class TeamController extends Controller
 
         $purchasePrices = $team->teamPlayers()->pluck('purchase_price', 'fantasy_player_id');
 
-        $rows = FantasyMarketPlayer::query()
+        $listings = FantasyMarketPlayer::query()
             ->where('fantasy_league_id', $team->fantasy_league_id)
             ->where('seller_team_id', $team->id)
             ->where('is_on_market', true)
             ->with('player')
             ->get()
-            ->filter(fn (FantasyMarketPlayer $listing) => $listing->player)
-            ->map(function (FantasyMarketPlayer $listing) use ($purchasePrices, $marketService, $account, $league) {
+            ->filter(fn (FantasyMarketPlayer $listing) => $listing->player);
+
+        // One concurrent batch instead of one live call per listing in turn —
+        // with every listing carrying an offer this page used to wait ~170 ms
+        // × N sequentially (2.5 s for 15 players).
+        $offerLookups = $this->fetchOffersBatch($listings, $marketService, $account, $league);
+
+        $rows = $listings
+            ->map(function (FantasyMarketPlayer $listing) use ($purchasePrices, $offerLookups) {
                 $purchasePrice = $purchasePrices->get($listing->fantasy_player_id);
                 $numberOfOffers = (int) ($listing->raw_payload['numberOfOffers'] ?? 0);
-                $fetch = $numberOfOffers > 0 ? $this->fetchOffers($listing, $marketService, $account, $league) : ['offers' => [], 'failed' => false];
+                $fetch = $numberOfOffers > 0 ? $offerLookups[$listing->id] : ['offers' => [], 'failed' => false];
                 $pending = collect($fetch['offers'])->filter(fn (FantasyMarketOfferDTO $o) => in_array($o->status, [null, FantasyMarketOfferDTO::STATUS_PENDING], true) && $o->money !== null);
                 $best = $pending->sortByDesc('money')->first();
                 $marketOffer = $best?->money;
@@ -421,6 +429,50 @@ class TeamController extends Controller
     /**
      * @return FantasyMarketOfferDTO[]
      */
+    /**
+     * fetchOffers() for every listing that has offers, as one concurrent batch.
+     *
+     * @return array<int, array{offers: FantasyMarketOfferDTO[], failed: bool}> keyed by FantasyMarketPlayer.id
+     */
+    private function fetchOffersBatch($listings, FantasyMarketService $marketService, $account, $league): array
+    {
+        $results = [];
+        $playerTeamIds = [];
+
+        foreach ($listings as $listing) {
+            if ((int) ($listing->raw_payload['numberOfOffers'] ?? 0) <= 0) {
+                continue;
+            }
+
+            $playerTeamId = data_get($listing->raw_payload, 'playerTeam.playerTeamId');
+
+            if ($playerTeamId) {
+                $playerTeamIds[$listing->id] = (string) $playerTeamId;
+            } else {
+                $results[$listing->id] = ['offers' => [], 'failed' => true];
+            }
+        }
+
+        try {
+            $byPlayerTeamId = $marketService->getDirectOffers($account, $league->external_id, array_values($playerTeamIds));
+        } catch (\Throwable $e) {
+            Log::channel('fantasy_api')->warning('fantasy.sales.offer_lookup_failed', ['message' => $e->getMessage()]);
+            $byPlayerTeamId = [];
+        }
+
+        foreach ($playerTeamIds as $listingId => $playerTeamId) {
+            $offers = $byPlayerTeamId[$playerTeamId] ?? null;
+
+            // See fetchOffers() for why a failed lookup (typically a 403 on a
+            // stale playerTeamId) must stay distinct from "confirmed none".
+            $results[$listingId] = $offers === null
+                ? ['offers' => [], 'failed' => true]
+                : ['offers' => $offers, 'failed' => false];
+        }
+
+        return $results;
+    }
+
     /**
      * @return array{offers: FantasyMarketOfferDTO[], failed: bool}
      */

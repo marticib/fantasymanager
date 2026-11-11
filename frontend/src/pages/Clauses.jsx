@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import apiClient from '../api/client'
+import { cachedGet } from '../api/cachedGet'
 import ScoreRing from '../components/ScoreRing'
 import Sparkline from '../components/Sparkline'
 import { ShieldIcon, WalletIcon, ArrowRightIcon } from '../components/Icons'
@@ -170,10 +170,9 @@ export default function Clauses() {
   const [sort, setSort] = useState({ key: 'clauseEconomicScore', direction: 'desc' })
 
   useEffect(() => {
-    apiClient
-      .get('/clauses/opportunities')
-      .then((res) => setPayload(res.data))
-      .catch((err) => setError(err.response?.data?.message || 'Error carregant les clàusules.'))
+    cachedGet('/clauses/opportunities', null, setPayload).catch((err) =>
+      setError(err.response?.data?.message || 'Error carregant les clàusules.'),
+    )
   }, [])
 
   const rows = useMemo(() => payload?.data || [], [payload])

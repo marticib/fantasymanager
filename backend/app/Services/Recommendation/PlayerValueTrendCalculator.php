@@ -45,11 +45,7 @@ class PlayerValueTrendCalculator
     public function historicalValues(FantasyPlayer $player, float $currentValue, ?FantasyExternalTrend $externalTrend): array
     {
         $now = now();
-        $snapshots = $player->snapshots()
-            ->whereNotNull('market_value')
-            ->where('captured_at', '>=', $now->copy()->subDays(10))
-            ->orderBy('captured_at')
-            ->get(['market_value', 'captured_at']);
+        $snapshots = $player->valueSnapshots($now->copy()->subDays(10));
 
         $closestBefore = function (Carbon $target) use ($snapshots): ?float {
             $snapshot = $snapshots->filter(fn (FantasyPlayerSnapshot $s) => $s->captured_at->lessThanOrEqualTo($target))->last();

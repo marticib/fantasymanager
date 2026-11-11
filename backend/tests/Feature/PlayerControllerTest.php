@@ -10,6 +10,7 @@ use App\Models\FantasyPlayer;
 use App\Models\FantasyTeam;
 use App\Models\FantasyTeamPlayer;
 use App\Models\User;
+use App\Support\DataVersion;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
@@ -344,6 +345,9 @@ class PlayerControllerTest extends TestCase
         $this->assertSame('BUY', $free->json('decision.type'));
 
         $this->marketListing($league, $player, 10_000_000);
+        // In production the listing arrives through FantasySyncService::syncMarket(),
+        // which bumps the account's data version — invalidating the cached response.
+        DataVersion::bumpAccount($league->fantasy_account_id);
 
         $onMarket = $this->actingAs($user, 'sanctum')->getJson("/api/players/{$player->id}");
         $this->assertSame('ON_MARKET', $onMarket->json('context'));

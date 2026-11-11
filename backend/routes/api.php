@@ -20,7 +20,7 @@ use Illuminate\Support\Facades\Route;
 Route::post('/auth/register', [AuthController::class, 'register']);
 Route::post('/auth/login', [AuthController::class, 'login']);
 
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware(['auth:sanctum', 'bump.data'])->group(function () {
     Route::post('/auth/logout', [AuthController::class, 'logout']);
     Route::get('/auth/me', [AuthController::class, 'me']);
 
@@ -36,26 +36,27 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/leagues/{league}/select', [LeagueController::class, 'select']);
 
     // Dashboard — "What should I do today?"
-    Route::get('/dashboard/today', [DashboardController::class, 'today']);
+    Route::get('/dashboard/header', [DashboardController::class, 'header']);
+    Route::get('/dashboard/today',[DashboardController::class, 'today'])->middleware('cache.api');
 
     // Team
-    Route::get('/team', [TeamController::class, 'show']);
-    Route::get('/team/analysis', [TeamController::class, 'analysis']);
+    Route::get('/team', [TeamController::class, 'show'])->middleware('cache.api');
+    Route::get('/team/analysis', [TeamController::class, 'analysis'])->middleware('cache.api');
     Route::get('/team/sales', [TeamController::class, 'sales']);
     Route::put('/team/sales/auto-list', [TeamController::class, 'updateAutoListSquad']);
     Route::post('/team/sales/{marketPlayer}/offers/{offerId}/accept', [TeamController::class, 'acceptSaleOffer']);
     Route::post('/team/sales/{marketPlayer}/offers/{offerId}/reject', [TeamController::class, 'rejectSaleOffer']);
 
     // Market
-    Route::get('/market', [MarketController::class, 'index']);
+    Route::get('/market', [MarketController::class, 'index'])->middleware('cache.api');
     Route::get('/market/opportunities', [MarketController::class, 'opportunities']);
     Route::get('/market/{marketPlayer}/buy-analysis', [MarketController::class, 'buyAnalysis']);
     Route::post('/market/{marketPlayer}/bid', [MarketController::class, 'placeBid']);
     Route::delete('/market/{marketPlayer}/bid', [MarketController::class, 'cancelBid']);
 
     // Players
-    Route::get('/players', [PlayerController::class, 'index']);
-    Route::get('/players/{player}', [PlayerController::class, 'show']);
+    Route::get('/players', [PlayerController::class, 'index'])->middleware('cache.api');
+    Route::get('/players/{player}', [PlayerController::class, 'show'])->middleware('cache.api');
 
     // Recommendations
     Route::get('/recommendations', [RecommendationController::class, 'index']);
@@ -64,7 +65,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Trading & clauses (scaffolded now, fleshed out post-MVP)
     Route::get('/trading/build-xi', [TradingController::class, 'buildXi']);
     Route::get('/trading/make-money', [TradingController::class, 'makeMoney']);
-    Route::get('/clauses/opportunities', [ClauseController::class, 'opportunities']);
+    Route::get('/clauses/opportunities', [ClauseController::class, 'opportunities'])->middleware('cache.api');
 
     Route::get('/clause-orders', [ClausePurchaseOrderController::class, 'index']);
     Route::post('/clause-orders', [ClausePurchaseOrderController::class, 'store']);
@@ -72,11 +73,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/clause-orders/{order}', [ClausePurchaseOrderController::class, 'destroy']);
 
     // Standings
-    Route::get('/standings', [StandingController::class, 'index']);
-    Route::get('/standings/{team}', [TeamController::class, 'rival']);
+    Route::get('/standings', [StandingController::class, 'index'])->middleware('cache.api');
+    Route::get('/standings/{team}', [TeamController::class, 'rival'])->middleware('cache.api');
 
     // History
-    Route::get('/history/team-value', [HistoryController::class, 'teamValue']);
+    Route::get('/history/team-value', [HistoryController::class, 'teamValue'])->middleware('cache.api');
     Route::get('/history/player/{player}', [HistoryController::class, 'player']);
     Route::get('/history/assistant-performance', [HistoryController::class, 'assistantPerformance']);
     Route::get('/history/decisions', [HistoryController::class, 'decisions']);

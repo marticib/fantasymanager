@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import apiClient from '../api/client'
+import { cachedGet } from '../api/cachedGet'
 import Sparkline from '../components/Sparkline'
 import { SearchIcon } from '../components/Icons'
 import { formatMoneyM, formatDelta, POSITION_LABELS, PLAYER_TYPE_LABEL, classifyPlayerType, initials } from '../utils/format'
@@ -98,13 +98,10 @@ export default function Players() {
 
   useEffect(() => {
     const handle = setTimeout(() => {
-      apiClient
-        .get('/players', { params: { position: position || undefined, search: search || undefined, per_page: 60 } })
-        .then((res) => {
-          setPlayers(res.data.data)
-          setTotal(res.data.total ?? res.data.data.length)
-        })
-        .catch((err) => setError(err.response?.data?.message || 'Error carregant els jugadors.'))
+      cachedGet('/players', { position: position || undefined, search: search || undefined, per_page: 60 }, (d) => {
+        setPlayers(d.data)
+        setTotal(d.total ?? d.data.length)
+      }).catch((err) => setError(err.response?.data?.message || 'Error carregant els jugadors.'))
     }, 250)
     return () => clearTimeout(handle)
   }, [position, search])

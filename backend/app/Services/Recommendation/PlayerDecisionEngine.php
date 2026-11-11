@@ -110,7 +110,7 @@ class PlayerDecisionEngine
             return collect();
         }
 
-        $teamPlayers = $team->teamPlayers()->with('player')->get()->filter(fn (FantasyTeamPlayer $tp) => $tp->player);
+        $teamPlayers = $team->teamPlayers()->with(['player.snapshots' => FantasyPlayer::valueSnapshotsConstraint()])->get()->filter(fn (FantasyTeamPlayer $tp) => $tp->player);
         $rules = $this->settings->rules($account);
         $availableCapital = max(0, (int) ($team->money ?? 0) - (int) $rules['minimum_cash_reserve']);
 
@@ -439,7 +439,7 @@ class PlayerDecisionEngine
         $listings = FantasyMarketPlayer::where('fantasy_league_id', $league->id)
             ->where('is_on_market', true)
             ->whereNotIn('fantasy_player_id', $ownedIds)
-            ->with('player')
+            ->with(['player.snapshots' => FantasyPlayer::valueSnapshotsConstraint()])
             ->get()
             ->filter(fn (FantasyMarketPlayer $m) => $m->player && $m->player->position);
 
@@ -576,11 +576,7 @@ class PlayerDecisionEngine
     private function historicalValues(FantasyPlayer $player, float $currentValue, ?FantasyExternalTrend $externalTrend): array
     {
         $now = now();
-        $snapshots = $player->snapshots()
-            ->whereNotNull('market_value')
-            ->where('captured_at', '>=', $now->copy()->subDays(10))
-            ->orderBy('captured_at')
-            ->get(['market_value', 'captured_at']);
+        $snapshots = $player->valueSnapshots($now->copy()->subDays(10));
 
         $closestBefore = function (Carbon $target) use ($snapshots): ?float {
             $snapshot = $snapshots->filter(fn (FantasyPlayerSnapshot $s) => $s->captured_at->lessThanOrEqualTo($target))->last();

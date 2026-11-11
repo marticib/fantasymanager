@@ -1,21 +1,25 @@
+import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import Layout from './components/Layout'
 import Login from './pages/Login'
 import Register from './pages/Register'
-import Onboarding from './pages/Onboarding'
-import Dashboard from './pages/Dashboard'
-import Market from './pages/Market'
-import Team from './pages/Team'
-import Sales from './pages/Sales'
-import Clauses from './pages/Clauses'
-import Trading from './pages/Trading'
-import Standings from './pages/Standings'
-import History from './pages/History'
-import Settings from './pages/Settings'
-import PlayerDetail from './pages/PlayerDetail'
-import Players from './pages/Players'
-import RivalTeam from './pages/RivalTeam'
+
+// One chunk per page: the first load only downloads the page being opened
+// (charts etc. come in with the pages that use them).
+const Onboarding = lazy(() => import('./pages/Onboarding'))
+const Dashboard = lazy(() => import('./pages/Dashboard'))
+const Market = lazy(() => import('./pages/Market'))
+const Team = lazy(() => import('./pages/Team'))
+const Sales = lazy(() => import('./pages/Sales'))
+const Clauses = lazy(() => import('./pages/Clauses'))
+const Trading = lazy(() => import('./pages/Trading'))
+const Standings = lazy(() => import('./pages/Standings'))
+const History = lazy(() => import('./pages/History'))
+const Settings = lazy(() => import('./pages/Settings'))
+const PlayerDetail = lazy(() => import('./pages/PlayerDetail'))
+const Players = lazy(() => import('./pages/Players'))
+const RivalTeam = lazy(() => import('./pages/RivalTeam'))
 
 function RequireAuth({ children }) {
   const { token, loading } = useAuth()
@@ -35,7 +39,9 @@ export default function App() {
             path="/onboarding"
             element={
               <RequireAuth>
-                <Onboarding />
+                <Suspense fallback={<div className="p-10 text-text-muted">Carregant…</div>}>
+                  <Onboarding />
+                </Suspense>
               </RequireAuth>
             }
           />

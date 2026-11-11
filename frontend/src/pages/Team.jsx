@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import apiClient from '../api/client'
+import { cachedGet } from '../api/cachedGet'
 import ChangeBadge from '../components/ChangeBadge'
 import Sparkline from '../components/Sparkline'
 import { TrendingUp, Wallet, Link2, ChevronDown } from 'lucide-react'
@@ -255,15 +255,9 @@ export default function Team() {
   const [dailyHistory, setDailyHistory] = useState(null)
 
   useEffect(() => {
-    apiClient
-      .get('/team')
-      .then((res) => setTeam(res.data))
-      .catch((err) => setError(err.response?.data?.message || 'Error carregant la plantilla.'))
-    apiClient.get('/team/analysis').then((res) => setAnalysis(res.data)).catch(() => {})
-    apiClient
-      .get('/history/team-value', { params: { range: '7d' } })
-      .then((res) => setDailyHistory(res.data.data))
-      .catch(() => {})
+    cachedGet('/team', null, setTeam).catch((err) => setError(err.response?.data?.message || 'Error carregant la plantilla.'))
+    cachedGet('/team/analysis', null, setAnalysis).catch(() => {})
+    cachedGet('/history/team-value', { range: '7d' }, (d) => setDailyHistory(d.data)).catch(() => {})
   }, [])
 
   if (error) return <p className="text-bear">{error}</p>

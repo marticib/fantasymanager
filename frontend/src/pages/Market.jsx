@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import apiClient from '../api/client'
+import { cachedGet, updateCached } from '../api/cachedGet'
 import ScoreRing from '../components/ScoreRing'
 import Sparkline from '../components/Sparkline'
 import BidModal from '../components/BidModal'
@@ -336,13 +337,10 @@ export default function Market() {
   const [pendingAction, setPendingAction] = useState(null)
 
   const load = () => {
-    apiClient
-      .get('/market')
-      .then((res) => {
-        setRows(res.data.data)
-        setMeta(res.data.meta)
-      })
-      .catch((err) => setError(err.response?.data?.message || 'Error carregant el mercat.'))
+    cachedGet('/market', null, (d) => {
+      setRows(d.data)
+      setMeta(d.meta)
+    }).catch((err) => setError(err.response?.data?.message || 'Error carregant el mercat.'))
   }
 
   useEffect(load, [])
@@ -365,7 +363,9 @@ export default function Market() {
         // waiting on a full reload — /market only reflects fantasy:sync-market's
         // last tick (minutes away), so without this the bid/cancel would
         // otherwise seem to do nothing until that next tick.
-        setRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, myBid: data.myBid ?? { money: rounded } } : r)))
+        const patch = (r) => (r.id === row.id ? { ...r, myBid: data.myBid ?? { money: rounded } } : r)
+        setRows((prev) => prev.map(patch))
+        updateCached('/market', null, (d) => ({ ...d, data: d.data.map(patch) }))
         return `Oferta ${label} de ${formatMoneyM(rounded)} enviada per ${row.player.name}.`
       },
     })
@@ -383,7 +383,9 @@ export default function Market() {
       confirmLabel: 'Cancel·lar oferta',
       run: async () => {
         await apiClient.delete(`/market/${row.id}/bid`)
-        setRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, myBid: null } : r)))
+        const patch = (r) => (r.id === row.id ? { ...r, myBid: null } : r)
+        setRows((prev) => prev.map(patch))
+        updateCached('/market', null, (d) => ({ ...d, data: d.data.map(patch) }))
         return `Oferta cancel·lada per ${row.player.name}.`
       },
     })

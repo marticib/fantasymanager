@@ -47,7 +47,7 @@ class PlayerController extends Controller
             $query->where('name', 'ilike', "%{$search}%");
         }
 
-        $players = $query->orderBy('name')->paginate(min((int) $request->query('per_page', 50), 200));
+        $players = $query->with(['snapshots' => FantasyPlayer::valueSnapshotsConstraint()])->orderBy('name')->paginate(min((int) $request->query('per_page', 50), 200));
         $playerIds = $players->getCollection()->pluck('id');
 
         $externalTrends = FantasyExternalTrend::where('source', 'futbolfantasy')

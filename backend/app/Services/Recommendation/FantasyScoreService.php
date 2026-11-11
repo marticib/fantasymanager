@@ -44,6 +44,9 @@ class FantasyScoreService
         PlayerTrend::MOLT_BAIXISTA => 0,
     ];
 
+    /** @var array<int, \Illuminate\Support\Collection> team id => players per position */
+    private array $positionCounts = [];
+
     public function __construct(
         private readonly TrendAnalysisService $trendService,
         private readonly FantasySettingsService $settings,
@@ -124,7 +127,9 @@ class FantasyScoreService
             return 50.0;
         }
 
-        $positionCounts = $myTeam->players()->get()->countBy('position');
+        // Same answer for every player scored in one screen — memoized per team
+        // instead of re-reading the whole roster once per player.
+        $positionCounts = $this->positionCounts[$myTeam->id] ??= $myTeam->players()->get()->countBy('position');
         $countAtPosition = $positionCounts[$player->position] ?? 0;
 
         // Fewer than 3 players at a position = clear need; 3-4 = comfortable; 5+ = surplus.

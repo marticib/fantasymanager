@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import apiClient from '../api/client'
+import { cachedGet } from '../api/cachedGet'
 import TodayActionCard from '../components/TodayActionCard'
 import BidModal from '../components/BidModal'
 import { WarningIcon, RefreshIcon, CheckIcon } from '../components/Icons'
@@ -80,15 +81,11 @@ export default function Dashboard() {
   }
 
   const load = () => {
-    apiClient
-      .get('/dashboard/today')
-      .then((res) => setData(res.data))
-      .catch((err) => setError(err.response?.data?.message || 'Error carregant el dashboard.'))
+    cachedGet('/dashboard/today', null, setData).catch((err) =>
+      setError(err.response?.data?.message || 'Error carregant el dashboard.'),
+    )
 
-    apiClient
-      .get('/clause-orders', { params: { status: 'NEEDS_CONFIRMATION' } })
-      .then((res) => setOrdersNeedingConfirmation(res.data.data))
-      .catch(() => {})
+    cachedGet('/clause-orders', { status: 'NEEDS_CONFIRMATION' }, (d) => setOrdersNeedingConfirmation(d.data)).catch(() => {})
   }
 
   useEffect(load, [])

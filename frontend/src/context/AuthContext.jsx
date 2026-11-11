@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react'
 import apiClient from '../api/client'
+import { clearCachedGets } from '../api/cachedGet'
 
 const AuthContext = createContext(null)
 
@@ -49,6 +50,7 @@ export function AuthProvider({ children }) {
       // ignore — we're clearing local state regardless
     }
     localStorage.removeItem('fantasy_token')
+    clearCachedGets()
     setToken(null)
     setUser(null)
   }

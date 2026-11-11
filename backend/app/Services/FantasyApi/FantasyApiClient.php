@@ -8,6 +8,7 @@ use App\Services\FantasyApi\Exceptions\FantasyApiException;
 use App\Services\FantasyApi\Exceptions\FantasyApiRateLimitException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Http\Client\Pool;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -35,6 +36,82 @@ class FantasyApiClient
     public function get(FantasyAccount $account, string $path, array $query = []): array
     {
         return $this->request($account, 'get', $path, ['query' => $query]);
+    }
+
+    /**
+     * Several GETs fired concurrently (Http::pool) instead of one after
+     * another — for screens that need one call per row (e.g. live offers on
+     * every listed player). Any path that doesn't come back 2xx on the
+     * concurrent pass (401, 429, 5xx, connection error) is retried through
+     * the regular get(), so token refresh / rate-limit handling still apply.
+     *
+     * @param  array<string, string>  $paths  key => path
+     * @return array<string, array|null> key => decoded body, or null if that path still failed
+     */
+    public function getMany(FantasyAccount $account, array $paths): array
+    {
+        if ($paths === []) {
+            return [];
+        }
+
+        $token = $this->auth->getValidAccessToken($account);
+        $query = config('fantasy.api.default_query', []);
+        $started = microtime(true);
+
+        $responses = Http::pool(fn (Pool $pool) => array_map(
+            fn (string $key, string $path) => $pool->as($key)
+                ->withToken($token)
+                ->timeout((int) config('fantasy.api.timeout'))
+                ->acceptJson()
+                ->get($this->buildUrl($path), $query),
+            array_keys($paths),
+            $paths,
+        ));
+
+        $durationMs = (int) ((microtime(true) - $started) * 1000);
+        $results = [];
+
+        foreach ($paths as $key => $path) {
+            $response = $responses[$key] ?? null;
+
+            if ($response instanceof Response) {
+                Log::channel('fantasy_api')->debug('fantasy.api.request', [
+                    'method' => 'get',
+                    'path' => $path,
+                    'status' => $response->status(),
+                    'duration_ms' => $durationMs,
+                    'pooled' => true,
+                ]);
+            }
+
+            if ($response instanceof Response && $response->successful()) {
+                $results[$key] = ($response->status() === 204 || $response->body() === '') ? [] : ($response->json() ?? []);
+
+                continue;
+            }
+
+            // A plain 4xx (403 on a stale id, 404, ...) fails the same way
+            // again — retrying it one by one would undo the concurrency.
+            // Only cases the regular path can actually recover from go back
+            // through get(): expired token, rate limit, server/connection error.
+            $retryable = ! $response instanceof Response
+                || in_array($response->status(), [401, 429], true)
+                || $response->serverError();
+
+            if (! $retryable) {
+                $results[$key] = null;
+
+                continue;
+            }
+
+            try {
+                $results[$key] = $this->get($account, $path);
+            } catch (FantasyApiException $e) {
+                $results[$key] = null;
+            }
+        }
+
+        return $results;
     }
 
     public function post(FantasyAccount $account, string $path, array $data = []): array

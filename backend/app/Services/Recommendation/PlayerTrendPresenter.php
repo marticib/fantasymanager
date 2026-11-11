@@ -31,13 +31,10 @@ class PlayerTrendPresenter
         $score = $this->scoreService->compute($player, $account, $trend);
         $effective = $this->trendService->effectiveClassification($trend, $externalTrend);
 
-        $ownHistory = $player->snapshots()
-            ->whereNotNull('market_value')
-            ->orderByDesc('captured_at')
-            ->limit(10)
-            ->get(['market_value', 'captured_at'])
-            ->reverse()
+        $ownHistory = $player->valueSnapshots()
+            ->slice(-10)
             ->values()
+            ->toBase()
             ->map(fn ($s) => ['value' => $s->market_value, 'capturedAt' => $s->captured_at->toIso8601String()]);
 
         [$history, $historySource] = $this->sparklineBuilder->build(

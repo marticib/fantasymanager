@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Services\ExternalData\FutbolFantasySyncService;
+use App\Support\DataVersion;
 use Illuminate\Console\Command;
 
 class FantasySyncExternalTrendsCommand extends Command
@@ -20,6 +21,9 @@ class FantasySyncExternalTrendsCommand extends Command
         }
 
         $result = $sync->sync();
+
+        // External trends feed every account's cached screens.
+        DataVersion::bumpGlobal();
 
         if ($result['total'] === 0) {
             $this->warn('Got 0 rows from futbolfantasy.com — the page may be unreachable or its markup may have changed.');

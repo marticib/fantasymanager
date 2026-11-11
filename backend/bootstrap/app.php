@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Middleware\BumpDataVersion;
+use App\Http\Middleware\CacheApiResponse;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -16,6 +18,10 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->api(prepend: [
             HandleCors::class,
+        ]);
+        $middleware->alias([
+            'cache.api' => CacheApiResponse::class,
+            'bump.data' => BumpDataVersion::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

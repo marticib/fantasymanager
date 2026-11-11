@@ -7,6 +7,7 @@ use App\Models\FantasyAccount;
 use App\Models\FantasyDailyReport;
 use App\Models\FantasyRecommendation;
 use App\Services\Recommendation\FantasyRecommendationEngine;
+use App\Support\DataVersion;
 use Illuminate\Console\Command;
 use Illuminate\Support\Collection;
 
@@ -33,6 +34,7 @@ class FantasyGenerateRecommendationsCommand extends Command
             $this->info("Account #{$account->id}: {$recommendations->count()} recommendations generated.");
 
             $this->recordDailyReport($account, $recommendations);
+            DataVersion::bumpAccount($account->id);
         }
 
         return self::SUCCESS;

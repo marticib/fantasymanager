@@ -31,7 +31,38 @@ class FantasyMarketService
      */
     public function getDirectOffer(FantasyAccount $account, string $leagueId, string $playerTeamId): array
     {
-        $data = $this->client->get($account, $this->competitionPath("/league/{$leagueId}/playerTeam/{$playerTeamId}/offer"));
+        return $this->parseOffers($this->client->get($account, $this->offerPath($leagueId, $playerTeamId)));
+    }
+
+    /**
+     * getDirectOffer() for many listings at once, fetched concurrently.
+     *
+     * @param  string[]  $playerTeamIds
+     * @return array<string, FantasyMarketOfferDTO[]|null> playerTeamId => offers, or null if that lookup failed
+     */
+    public function getDirectOffers(FantasyAccount $account, string $leagueId, array $playerTeamIds): array
+    {
+        $paths = [];
+        foreach (array_unique($playerTeamIds) as $playerTeamId) {
+            $paths[(string) $playerTeamId] = $this->offerPath($leagueId, (string) $playerTeamId);
+        }
+
+        return array_map(
+            fn (?array $data) => $data === null ? null : $this->parseOffers($data),
+            $this->client->getMany($account, $paths),
+        );
+    }
+
+    private function offerPath(string $leagueId, string $playerTeamId): string
+    {
+        return $this->competitionPath("/league/{$leagueId}/playerTeam/{$playerTeamId}/offer");
+    }
+
+    /**
+     * @return FantasyMarketOfferDTO[]
+     */
+    private function parseOffers(array $data): array
+    {
         $list = $data['data'] ?? $data;
         $list = array_is_list($list) ? $list : [$list];
 

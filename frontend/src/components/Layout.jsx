@@ -1,7 +1,7 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import apiClient from '../api/client'
-import { useEffect, useRef, useState } from 'react'
+import { Suspense, useEffect, useRef, useState } from 'react'
 import { formatRelativeTime, initials } from '../utils/format'
 import { LogoIcon } from './Icons'
 import {
@@ -277,7 +277,7 @@ export default function Layout() {
 
   const loadHeader = () => {
     apiClient
-      .get('/dashboard/today')
+      .get('/dashboard/header')
       .then((res) => setHeader(res.data))
       .catch(() => {})
   }
@@ -356,7 +356,9 @@ export default function Layout() {
       </header>
 
       <main className="px-4 py-6 pb-24 sm:px-6 md:pb-10 lg:px-10 lg:py-10">
-        <Outlet context={{ header, refreshHeader: loadHeader }} />
+        <Suspense fallback={<p className="text-muted-foreground">Carregant…</p>}>
+          <Outlet context={{ header, refreshHeader: loadHeader }} />
+        </Suspense>
       </main>
 
       <MobileBottomNav />

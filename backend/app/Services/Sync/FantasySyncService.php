@@ -20,6 +20,7 @@ use App\Services\FantasyApi\FantasyLeagueService;
 use App\Services\FantasyApi\FantasyMarketService;
 use App\Services\FantasyApi\FantasyPlayerService;
 use App\Services\FantasyApi\FantasyTeamService;
+use App\Support\DataVersion;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
@@ -99,6 +100,8 @@ class FantasySyncService
             'active_team_id' => $team->id,
         ])->save();
 
+        DataVersion::bumpAccount($account->id);
+
         return $team;
     }
 
@@ -146,6 +149,9 @@ class FantasySyncService
             ]);
         }
 
+        // The player catalog is shared by every account.
+        DataVersion::bumpGlobal();
+
         return count($players);
     }
 
@@ -192,6 +198,8 @@ class FantasySyncService
         } catch (\Throwable $e) {
             Log::channel('fantasy_api')->warning('fantasy.sync.auto_list_squad_failed', ['message' => $e->getMessage()]);
         }
+
+        DataVersion::bumpAccount($account->id);
     }
 
     /**
@@ -301,6 +309,8 @@ class FantasySyncService
                 ]);
             }
         }
+
+        DataVersion::bumpAccount($account->id);
 
         return ['teams' => $rivals->count(), 'players' => $playerCount];
     }
@@ -444,6 +454,8 @@ class FantasySyncService
         FantasyMarketPlayer::where('fantasy_league_id', $league->id)
             ->whereNotIn('fantasy_player_id', $seenPlayerIds ?: [0])
             ->update(['is_on_market' => false]);
+
+        DataVersion::bumpAccount($account->id);
 
         return count($listings);
     }

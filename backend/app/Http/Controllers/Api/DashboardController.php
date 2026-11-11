@@ -50,6 +50,21 @@ class DashboardController extends Controller
     }
 
     /**
+     * Just what the app-wide header needs — previously the header loaded the
+     * whole today() payload (every recommendation engine) for these 3 fields.
+     */
+    public function header(Request $request)
+    {
+        $account = $this->currentAccount($request);
+
+        return response()->json([
+            'leagueName' => $account->activeLeague?->name,
+            'currentMatchday' => $account->current_matchday,
+            'lastSyncedAt' => $account->last_synced_at?->toIso8601String(),
+        ]);
+    }
+
+    /**
      * @return array{leaguePosition: ?int, leaguePositionDeltaWeek: ?int}
      */
     private function standingSummary(?int $leagueId, ?int $teamId): array

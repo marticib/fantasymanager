@@ -128,4 +128,38 @@ class FantasyApiClientTest extends TestCase
 
         Http::assertNothingSent();
     }
+
+    public function test_get_many_returns_each_body_and_null_for_a_failed_path_without_retrying_it(): void
+    {
+        Http::fake([
+            'fantasy-api.llt-services.com/api/v1/ok-a*' => Http::response(['a' => 1], 200),
+            'fantasy-api.llt-services.com/api/v1/ok-b*' => Http::response('', 204),
+            'fantasy-api.llt-services.com/api/v1/forbidden*' => Http::response(['message' => 'no'], 403),
+        ]);
+
+        $client = $this->app->make(FantasyApiClient::class);
+        $result = $client->getMany($this->account(), [
+            'a' => '/v1/ok-a',
+            'b' => '/v1/ok-b',
+            'c' => '/v1/forbidden',
+        ]);
+
+        $this->assertSame(['a' => ['a' => 1], 'b' => [], 'c' => null], $result);
+        // A 403 won't succeed on retry — it must not be re-sent one by one.
+        Http::assertSentCount(3);
+    }
+
+    public function test_get_many_retries_a_server_error_through_the_regular_path(): void
+    {
+        Http::fake([
+            'fantasy-api.llt-services.com/api/v1/flaky*' => Http::sequence()
+                ->push(['message' => 'boom'], 503)
+                ->push(['recovered' => true], 200),
+        ]);
+
+        $client = $this->app->make(FantasyApiClient::class);
+        $result = $client->getMany($this->account(), ['x' => '/v1/flaky']);
+
+        $this->assertSame(['x' => ['recovered' => true]], $result);
+    }
 }

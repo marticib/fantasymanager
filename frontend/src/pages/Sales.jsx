@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import apiClient from '../api/client'
+import { cachedGet } from '../api/cachedGet'
 import { formatMoney, formatDelta, formatPercent, formatCountdown, POSITION_LABELS, initials } from '../utils/format'
 
 function profitClass(value) {
@@ -133,10 +134,7 @@ export default function Sales() {
   const [autoListNotice, setAutoListNotice] = useState('')
 
   const load = () => {
-    apiClient
-      .get('/team/sales')
-      .then((res) => setPayload(res.data))
-      .catch((err) => setError(err.response?.data?.message || 'Error carregant les vendes.'))
+    cachedGet('/team/sales', null, setPayload).catch((err) => setError(err.response?.data?.message || 'Error carregant les vendes.'))
   }
 
   useEffect(load, [])

@@ -2,6 +2,9 @@
 
 namespace App\Models;
 
+use Carbon\CarbonInterface;
+use Closure;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -39,6 +42,46 @@ class FantasyPlayer extends Model
     public function snapshots(): HasMany
     {
         return $this->hasMany(FantasyPlayerSnapshot::class)->orderBy('captured_at');
+    }
+
+    /**
+     * Eager-load constraint for list screens:
+     * `->with(['player.snapshots' => FantasyPlayer::valueSnapshotsConstraint()])`
+     * — one query for every row's history instead of several per player.
+     */
+    public static function valueSnapshotsConstraint(): Closure
+    {
+        return fn ($query) => $query
+            ->whereNotNull('market_value')
+            ->select(['id', 'fantasy_player_id', 'market_value', 'captured_at']);
+    }
+
+    /**
+     * Market-value snapshots, oldest first, optionally only those captured
+     * since $since. Served from the eager-loaded relation when the caller
+     * preloaded it (see valueSnapshotsConstraint()), otherwise queried.
+     *
+     * @return Collection<int, FantasyPlayerSnapshot>
+     */
+    public function valueSnapshots(?CarbonInterface $since = null): Collection
+    {
+        if ($this->relationLoaded('snapshots')) {
+            $snapshots = $this->snapshots->whereNotNull('market_value');
+
+            if ($since) {
+                $snapshots = $snapshots->filter(fn (FantasyPlayerSnapshot $s) => $s->captured_at->greaterThanOrEqualTo($since));
+            }
+
+            return $snapshots->values();
+        }
+
+        $query = $this->snapshots()->whereNotNull('market_value');
+
+        if ($since) {
+            $query->where('captured_at', '>=', $since);
+        }
+
+        return $query->get(['market_value', 'captured_at']);
     }
 
     public function teamPlayers(): HasMany

@@ -26,12 +26,7 @@ class TrendAnalysisService
 
     public function analyze(FantasyPlayer $player): PlayerTrend
     {
-        $snapshots = $player->snapshots()
-            ->whereNotNull('market_value')
-            ->orderBy('captured_at')
-            ->get(['market_value', 'captured_at']);
-
-        return $this->analyzeSnapshots($snapshots);
+        return $this->analyzeSnapshots($player->valueSnapshots());
     }
 
     public function analyzeSnapshots(Collection $snapshots): PlayerTrend
