@@ -43,8 +43,9 @@ const NAV_ITEMS = [
 ]
 const SETTINGS_ITEM = { to: '/settings', label: 'Configuració', icon: SettingsIcon }
 
-// The daily flow: what to do today → buy → sell → my squad. Everything else is behind "Més".
-const MOBILE_TAB_PATHS = ['/', '/market', '/sales', '/team']
+
+// Mobile tabs: what to do today → buy → clauses → my squad. Everything else (Vendes included) is behind "Més".
+const MOBILE_TAB_PATHS = ['/', '/market', '/clauses', '/team']
 
 const HEADER_POLL_MS = 60_000
 const SYNC_POLL_MS = 3_000
@@ -95,7 +96,7 @@ function CountBadge({ count, help, className = '' }) {
   if (!count) return null
   return (
     <span
-      className={`num inline-flex min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-bold leading-5 text-background ${className}`}
+      className={`num inline-flex min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-bold leading-5 text-background shadow-[0_0_0_2px_var(--color-surface)] ${className}`}
       aria-label={help ? `${count} ${help}` : String(count)}
     >
       {count > 99 ? '99+' : count}
@@ -112,7 +113,7 @@ function HeaderClock() {
   }, [])
 
   return (
-    <span className="hidden shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-border px-3 py-1.5 text-sm text-muted-foreground lg:flex">
+    <span className="hidden min-h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-surface-raised/60 px-3.5 text-sm text-muted-foreground lg:flex">
       <Clock className="h-4 w-4" />
       <span className="num font-semibold text-foreground">
         {new Intl.DateTimeFormat('ca-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(now)}
@@ -156,14 +157,14 @@ function LeagueSwitcher({ leagueName }) {
       <button
         onClick={toggle}
         aria-expanded={open}
-        className="flex min-h-10 min-w-0 items-center gap-2 rounded-lg border border-border bg-surface px-3 text-sm font-medium hover:border-primary/50"
+        className="flex min-h-10 min-w-0 items-center gap-2 rounded-full bg-surface-raised/60 px-3.5 text-sm font-semibold hover:bg-surface-raised"
       >
         <Trophy className="h-4 w-4 shrink-0 text-muted-foreground" />
         <span className="max-w-24 truncate sm:max-w-40">{leagueName || 'Sense lliga'}</span>
         <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
       </button>
       {open && (
-        <div className="panel elevated absolute left-0 top-full z-30 mt-2 w-64 p-2">
+        <div className="panel elevated absolute left-0 top-full z-30 mt-2 w-64 p-1.5">
           {!leagues && <p className="px-2 py-2 text-xs text-muted-foreground">Carregant lligues…</p>}
           {leagues?.map((league) => (
             <button
@@ -192,13 +193,13 @@ function SyncButton({ syncing, lastSyncedAt, onSync }) {
         onClick={onSync}
         disabled={syncing}
         aria-label={syncing ? 'Sincronitzant' : 'Sincronitzar ara'}
-        className="flex min-h-10 min-w-10 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-border px-2.5 text-sm font-semibold hover:border-primary/50 disabled:opacity-60 sm:px-3"
+        className="flex min-h-10 min-w-10 shrink-0 items-center justify-center gap-1.5 rounded-full bg-primary px-2.5 text-sm font-semibold text-background shadow-[0_6px_20px_-8px_var(--color-primary)] hover:brightness-110 disabled:opacity-70 sm:px-4"
       >
-        <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin text-primary' : ''}`} />
+        <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
         <span className="hidden sm:inline">{syncing ? 'Sincronitzant…' : 'Sincronitzar'}</span>
       </button>
       <span className="hidden whitespace-nowrap text-xs text-muted-foreground xl:inline">
-        {syncing ? 'Actualitzant dades de LaLiga…' : lastSyncedAt ? `Actualitzat ${formatRelativeTime(lastSyncedAt)}` : 'Encara no sincronitzat'}
+        {syncing ? 'Actualitzant dades de LaLiga…' : lastSyncedAt ? `Actualitzat ${formatRelativeTime(lastSyncedAt)}` : ''}
       </span>
     </div>
   )
@@ -252,7 +253,7 @@ function NotificationBell({ unread, onChanged }) {
         onClick={toggle}
         aria-label={unread ? `Avisos, ${unread} sense llegir` : 'Avisos'}
         aria-expanded={open}
-        className="relative flex min-h-10 min-w-10 items-center justify-center rounded-lg border border-border hover:border-primary/50"
+        className="relative flex min-h-10 min-w-10 items-center justify-center rounded-full bg-surface-raised/60 hover:bg-surface-raised"
       >
         <Bell className="h-4.5 w-4.5" />
         <CountBadge count={unread} className="absolute -right-1.5 -top-1.5" />
@@ -316,7 +317,7 @@ function UserMenu({ user, onLogout }) {
         onClick={() => setOpen((o) => !o)}
         aria-label="Menú d'usuari"
         aria-expanded={open}
-        className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary hover:bg-primary/25"
+        className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-primary/35 to-info/30 text-xs font-bold text-foreground ring-1 ring-border-strong hover:brightness-110"
       >
         {initials(user?.name)}
       </button>
@@ -335,36 +336,32 @@ function UserMenu({ user, onLogout }) {
   )
 }
 
-function Sidebar({ badges }) {
+/** Desktop navigation: a horizontal bar right under the header (scrolls sideways if the window is narrow). */
+function TopNav({ badges }) {
   const linkClass = ({ isActive }) =>
-    `flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors ${
-      isActive ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:bg-surface-raised hover:text-foreground'
+    `relative flex h-11 shrink-0 items-center gap-2 rounded-lg px-3 text-sm font-medium ${
+      isActive
+        ? 'text-foreground after:absolute after:inset-x-2 after:-bottom-px after:h-0.5 after:rounded-full after:bg-primary'
+        : 'text-muted-foreground hover:bg-surface-raised/60 hover:text-foreground'
     }`
 
   return (
-    <aside className="sticky top-0 hidden h-screen w-56 shrink-0 flex-col border-r border-border bg-surface md:flex">
-      <Link to="/" className="flex items-center gap-2.5 px-5 py-4">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary">
-          <LogoIcon className="h-5 w-5" />
-        </span>
-        <span className="text-sm font-bold leading-tight tracking-tight">Fantasy Assistant</span>
-      </Link>
-      <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-2" aria-label="Navegació principal">
-        {NAV_ITEMS.map((item) => (
-          <NavLink key={item.to} to={item.to} end={item.end} className={linkClass}>
-            <item.icon className="h-4.5 w-4.5 shrink-0" />
-            <span className="flex-1">{item.label}</span>
-            <CountBadge count={item.badge && badges?.[item.badge]} help={item.badgeHelp} />
-          </NavLink>
-        ))}
-      </nav>
-      <div className="border-t border-border px-3 py-3">
-        <NavLink to={SETTINGS_ITEM.to} className={linkClass}>
-          <SettingsIcon className="h-4.5 w-4.5 shrink-0" />
-          {SETTINGS_ITEM.label}
+    <nav
+      className="hidden items-center gap-1 overflow-x-auto px-3 [scrollbar-width:none] sm:px-6 md:flex lg:px-10"
+      aria-label="Navegació principal"
+    >
+      {[...NAV_ITEMS, SETTINGS_ITEM].map((item) => (
+        <NavLink key={item.to} to={item.to} end={item.end} className={linkClass}>
+          {({ isActive }) => (
+            <>
+              <item.icon className={`h-4 w-4 shrink-0 ${isActive ? 'text-primary' : ''}`} />
+              {item.label}
+              <CountBadge count={item.badge && badges?.[item.badge]} help={item.badgeHelp} />
+            </>
+          )}
         </NavLink>
-      </div>
-    </aside>
+      ))}
+    </nav>
   )
 }
 
@@ -377,31 +374,36 @@ function MobileBottomNav({ badges }) {
   const moreActive = moreItems.some((i) => location.pathname.startsWith(i.to))
 
   const tabClass = ({ isActive }) =>
-    `relative flex min-h-14 flex-1 flex-col items-center justify-center gap-1 text-xs font-medium ${isActive ? 'text-primary' : 'text-muted-foreground'}`
+    `relative flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 text-[11px] font-semibold ${isActive ? 'text-primary' : 'text-muted-foreground'}`
+  const iconWrap = (active) => `relative flex h-8 w-12 items-center justify-center rounded-full ${active ? 'bg-primary/15' : ''}`
 
   const moreLinkClass = ({ isActive }) =>
-    `flex min-h-12 items-center gap-3 rounded-lg px-3 text-sm font-medium ${
+    `flex min-h-12 items-center gap-3 rounded-xl px-3 text-sm font-medium ${
       isActive ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:bg-surface-raised hover:text-foreground'
     }`
 
   return (
-    // Square-cornered on purpose (not `panel`): it's an edge-to-edge fixed bar.
+    // A floating, frosted bar inset from the screen edges (and above the iOS home indicator).
     <nav
-      className="fixed inset-x-0 bottom-0 z-40 flex border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] elevated md:hidden"
+      className="glass elevated fixed inset-x-3 bottom-[calc(0.75rem+env(safe-area-inset-bottom))] z-40 flex rounded-2xl border border-border-strong px-1 md:hidden"
       aria-label="Navegació principal"
     >
       {tabs.map((item) => (
         <NavLink key={item.to} to={item.to} end={item.end} className={tabClass}>
-          <span className="relative">
-            <item.icon className="h-5.5 w-5.5" />
-            <CountBadge count={item.badge && badges?.[item.badge]} help={item.badgeHelp} className="absolute -right-3 -top-2" />
-          </span>
-          {item.short || item.label}
+          {({ isActive }) => (
+            <>
+              <span className={iconWrap(isActive)}>
+                <item.icon className="h-5 w-5" />
+                <CountBadge count={item.badge && badges?.[item.badge]} help={item.badgeHelp} className="absolute -right-1 -top-1.5" />
+              </span>
+              {item.short || item.label}
+            </>
+          )}
         </NavLink>
       ))}
       <div className="relative flex flex-1" ref={ref}>
         {open && (
-          <div className="panel elevated absolute bottom-full right-2 z-30 mb-2 w-64 p-2">
+          <div className="panel elevated absolute bottom-full right-0 z-30 mb-3 w-64 p-1.5">
             {moreItems.map((item) => (
               <NavLink key={item.to} to={item.to} className={moreLinkClass}>
                 <item.icon className="h-5 w-5 shrink-0" />
@@ -414,13 +416,13 @@ function MobileBottomNav({ badges }) {
         <button
           onClick={() => setOpen((o) => !o)}
           aria-expanded={open}
-          className={`relative flex min-h-14 flex-1 flex-col items-center justify-center gap-1 text-xs font-medium ${
+          className={`relative flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 text-[11px] font-semibold ${
             open || moreActive ? 'text-primary' : 'text-muted-foreground'
           }`}
         >
-          <span className="relative">
-            <Menu className="h-5.5 w-5.5" />
-            <CountBadge count={moreBadge} className="absolute -right-3 -top-2" />
+          <span className={iconWrap(open || moreActive)}>
+            <Menu className="h-5 w-5" />
+            <CountBadge count={moreBadge} className="absolute -right-1 -top-1.5" />
           </span>
           Més
         </button>
@@ -431,7 +433,7 @@ function MobileBottomNav({ badges }) {
 
 function SessionExpiredBanner() {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-bear/30 bg-bear/10 px-4 py-3 sm:px-6 lg:px-10">
+    <div className="mx-4 mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-bear/30 bg-bear/10 px-4 py-3 sm:mx-6 lg:mx-10">
       <div className="flex items-start gap-3">
         <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-bear" />
         <div>
@@ -457,7 +459,7 @@ function Toast({ toast, onClose }) {
 
   if (!toast) return null
   return (
-    <div className="fixed inset-x-3 bottom-20 z-50 flex justify-center md:bottom-6" role="status">
+    <div className="fixed inset-x-3 bottom-24 z-50 flex justify-center md:bottom-6" role="status">
       <div
         className={`panel elevated flex max-w-md items-center gap-3 px-4 py-3 text-sm ${toast.tone === 'error' ? 'border-bear/40 text-bear' : 'border-bull/40 text-bull'}`}
       >
@@ -573,36 +575,41 @@ export default function Layout() {
   const closeToast = useCallback(() => setToast(null), [])
 
   return (
-    <div className="flex min-h-screen bg-background text-foreground">
-      <Sidebar badges={header?.badges} />
-
+    <div className="flex min-h-screen text-foreground">
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* Never wraps: on mobile it keeps only logo, league, sync, bell and avatar. */}
-        <header className="sticky top-0 z-30 flex flex-nowrap items-center justify-between gap-2 border-b border-border bg-surface/95 px-3 py-2.5 backdrop-blur sm:gap-3 sm:px-6 lg:px-10">
-          <div className="flex min-w-0 flex-nowrap items-center gap-2 sm:gap-3">
-            <Link to="/" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary md:hidden" aria-label="Avui">
-              <LogoIcon className="h-5 w-5" />
-            </Link>
-            <LeagueSwitcher leagueName={header?.leagueName} />
-            {header?.currentMatchday && (
-              <span className="hidden items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm text-muted-foreground sm:flex">
-                <Calendar className="h-4 w-4" />
-                Jornada <span className="num font-semibold text-foreground">{header.currentMatchday}</span>
-              </span>
-            )}
-          </div>
+        {/* Header + desktop menu stick together. The header row never wraps: on
+            mobile it keeps only logo, league, sync, bell and avatar. */}
+        <div className="glass sticky top-0 z-30 border-b border-border">
+          <header className="flex flex-nowrap items-center justify-between gap-2 px-3 py-2.5 sm:gap-3 sm:px-6 lg:px-10">
+            <div className="flex min-w-0 flex-nowrap items-center gap-2 sm:gap-3">
+              <Link to="/" className="flex shrink-0 items-center gap-2.5" aria-label="Avui">
+                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary/60 text-background shadow-[0_8px_24px_-10px_var(--color-primary)]">
+                  <LogoIcon className="h-5 w-5" />
+                </span>
+                <span className="hidden text-sm font-bold tracking-tight lg:block">Fantasy Assistant</span>
+              </Link>
+              <LeagueSwitcher leagueName={header?.leagueName} />
+              {header?.currentMatchday && (
+                <span className="hidden min-h-10 items-center gap-1.5 rounded-full bg-surface-raised/60 px-3.5 text-sm text-muted-foreground sm:flex">
+                  <Calendar className="h-4 w-4" />
+                  Jornada <span className="num font-semibold text-foreground">{header.currentMatchday}</span>
+                </span>
+              )}
+            </div>
 
-          <div className="flex shrink-0 flex-nowrap items-center gap-2 sm:gap-3">
-            <HeaderClock />
-            <SyncButton syncing={syncing} lastSyncedAt={header?.lastSyncedAt} onSync={triggerSync} />
-            <NotificationBell unread={header?.unreadAlerts || 0} onChanged={loadHeader} />
-            <UserMenu user={user} onLogout={logout} />
-          </div>
-        </header>
+            <div className="flex shrink-0 flex-nowrap items-center gap-2 sm:gap-3">
+              <HeaderClock />
+              <SyncButton syncing={syncing} lastSyncedAt={header?.lastSyncedAt} onSync={triggerSync} />
+              <NotificationBell unread={header?.unreadAlerts || 0} onChanged={loadHeader} />
+              <UserMenu user={user} onLogout={logout} />
+            </div>
+          </header>
+          <TopNav badges={header?.badges} />
+        </div>
 
         {sessionExpired && <SessionExpiredBanner />}
 
-        <main className="flex-1 px-4 py-6 pb-28 sm:px-6 md:pb-10 lg:px-10 lg:py-8">
+        <main className="mx-auto w-full max-w-[1440px] flex-1 px-4 py-6 pb-32 sm:px-6 md:pb-12 lg:px-10 lg:py-8">
           <Suspense fallback={<PageSkeleton />}>
             <Outlet context={{ header, refreshHeader: loadHeader }} />
           </Suspense>

@@ -14,10 +14,18 @@ const TYPE_META = {
 }
 
 const BORDER_CLASS = {
-  clause: 'border-info/30',
-  buy: 'border-bull/30',
-  sell: 'border-bear/30',
-  hold: 'border-border',
+  clause: 'border-info/25 hover:border-info/45',
+  buy: 'border-bull/25 hover:border-bull/45',
+  sell: 'border-bear/25 hover:border-bear/45',
+  hold: 'border-border hover:border-border-strong',
+}
+
+// Soft tone-colored wash along the top of the card.
+const GLOW_CLASS = {
+  clause: 'from-info/12',
+  buy: 'from-bull/12',
+  sell: 'from-bear/12',
+  hold: 'from-muted-foreground/8',
 }
 
 const TEXT_CLASS = {
@@ -32,11 +40,15 @@ const BG_CLASS = {
   buy: 'bg-bull/10 text-bull',
   sell: 'bg-bear/10 text-bear',
   hold: 'bg-muted-foreground/10 text-muted-foreground',
+  // Stat accents passed by color name rather than action tone.
+  info: 'bg-info/10 text-info',
+  bull: 'bg-bull/10 text-bull',
+  bear: 'bg-bear/10 text-bear',
 }
 
 function Stat({ label, value, accent, hint, info, onBid, busy }) {
   return (
-    <div className={accent ? `rounded-xl p-3 ${BG_CLASS[accent]}` : 'rounded-xl border border-border p-3'}>
+    <div className={accent ? `rounded-xl p-3 ${BG_CLASS[accent]}` : 'rounded-xl bg-surface-raised/50 p-3 ring-1 ring-inset ring-border'}>
       <p className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide opacity-80">
         {label}
         {info && <InfoTip>{info}</InfoTip>}
@@ -64,8 +76,9 @@ export default function TodayActionCard({ action, onBid, busy, onDismiss }) {
   const offerAdvantage = action.amount != null && action.projectedValue != null ? action.amount - action.projectedValue : null
 
   return (
-    <div className={`flex flex-col rounded-2xl border bg-surface p-6 ${BORDER_CLASS[color]}`}>
-      <div className="flex items-center justify-between gap-2">
+    <div className={`panel elevated relative flex flex-col overflow-hidden p-5 hover:-translate-y-0.5 sm:p-6 ${BORDER_CLASS[color]}`}>
+      <div className={`pointer-events-none absolute inset-x-0 top-0 h-28 bg-gradient-to-b to-transparent ${GLOW_CLASS[color]}`} />
+      <div className="relative flex items-center justify-between gap-2">
         <span className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold uppercase tracking-wide ${BG_CLASS[color]}`}>
           <span className={`h-1.5 w-1.5 rounded-full bg-current`} />
           {action.category === 'urgent' ? 'Prioritat màxima' : 'Oportunitat'}
@@ -76,7 +89,7 @@ export default function TodayActionCard({ action, onBid, busy, onDismiss }) {
         </span>
       </div>
 
-      <p className={`mt-4 text-xl font-extrabold tracking-tight ${TEXT_CLASS[color]}`}>{action.title || meta.label}</p>
+      <p className={`relative mt-4 text-xl font-bold tracking-tight ${TEXT_CLASS[color]}`}>{action.title || meta.label}</p>
 
       {player && (
         <div className="mt-4 flex items-center gap-3">

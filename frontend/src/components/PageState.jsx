@@ -7,13 +7,13 @@ export function PageSkeleton({ cards = 3, rows = 6 }) {
       {cards > 0 && (
         <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
           {Array.from({ length: cards }, (_, i) => (
-            <div key={i} className="h-20 rounded-xl border border-border bg-surface" />
+            <div key={i} className="panel h-24" />
           ))}
         </div>
       )}
       <div className="mt-6 space-y-2">
         {Array.from({ length: rows }, (_, i) => (
-          <div key={i} className="flex h-14 items-center gap-3 rounded-xl border border-border bg-surface px-4">
+          <div key={i} className="panel flex h-16 items-center gap-3 px-4">
             <div className="h-8 w-8 shrink-0 rounded-full bg-surface-raised" />
             <div className="h-3 flex-1 rounded bg-surface-raised" />
             <div className="h-3 w-16 rounded bg-surface-raised" />
@@ -38,9 +38,9 @@ export function BlockSkeleton({ rows = 3 }) {
 /** A friendly "nothing here" message with an optional way out. */
 export function EmptyState({ icon: Icon, title, message, actionLabel, onAction, className = '' }) {
   return (
-    <div className={`flex flex-col items-center rounded-xl border border-border bg-surface px-6 py-10 text-center ${className}`}>
+    <div className={`panel flex flex-col items-center px-6 py-12 text-center ${className}`}>
       {Icon && (
-        <div className="flex h-11 w-11 items-center justify-center rounded-full bg-surface-raised text-muted-foreground">
+        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-surface-raised text-muted-foreground ring-1 ring-border">
           <Icon className="h-5 w-5" />
         </div>
       )}

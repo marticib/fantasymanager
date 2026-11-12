@@ -1,14 +1,16 @@
 @import "tailwindcss";
 
 :root {
-  --background: oklch(0.16 0.006 260);
-  --foreground: oklch(0.98 0.002 260);
-  --surface: oklch(0.204 0.007 260);
-  --surface-raised: oklch(0.238 0.008 260);
-  --muted-foreground: oklch(0.66 0.012 260);
-  --border: oklch(1 0 0 / 8%);
-  --border-strong: oklch(1 0 0 / 14%);
-  --primary: oklch(0.72 0.145 156);
+  /* Same hues as before (cool graphite + green accent), a touch deeper and
+     with more separation between layers so cards read as cards. */
+  --background: oklch(0.145 0.009 262);
+  --foreground: oklch(0.975 0.003 262);
+  --surface: oklch(0.192 0.01 262);
+  --surface-raised: oklch(0.235 0.012 262);
+  --muted-foreground: oklch(0.68 0.014 262);
+  --border: oklch(1 0 0 / 7%);
+  --border-strong: oklch(1 0 0 / 13%);
+  --primary: oklch(0.75 0.15 156);
   --bull: oklch(0.74 0.14 158);
   --bull-soft: oklch(0.74 0.14 158 / 14%);
   --bear: oklch(0.65 0.16 22);
@@ -17,7 +19,7 @@
   --warn-soft: oklch(0.77 0.14 68 / 14%);
   --info: oklch(0.68 0.13 275);
   --info-soft: oklch(0.68 0.13 275 / 14%);
-  --radius: 0.75rem;
+  --radius: 0.8rem;
 }
 
 @theme inline {
@@ -41,9 +43,9 @@
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) * 1.333);
 
-  --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
-  --font-heading: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-heading: "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, monospace;
 
   /*
    * Design-system rollout is staged page by page (see README) — Team.jsx
@@ -69,19 +71,31 @@
 @utility num {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
 }
 
 @utility panel {
-  background-color: var(--color-surface);
+  background:
+    linear-gradient(180deg, oklch(1 0 0 / 3%), oklch(1 0 0 / 0%) 45%),
+    var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-xl);
 }
 
+/* Frosted bar/overlay: navigation, sticky header, floating menus. */
+@utility glass {
+  background-color: oklch(0.192 0.01 262 / 78%);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+}
+
+
 @utility elevated {
   box-shadow:
-    0 1px 0 0 oklch(1 0 0 / 4%) inset,
-    0 12px 32px -18px oklch(0 0 0 / 80%);
+    0 1px 0 0 oklch(1 0 0 / 5%) inset,
+    0 1px 2px oklch(0 0 0 / 30%),
+    0 18px 40px -20px oklch(0 0 0 / 85%);
 }
 
 @utility grid-fade {
@@ -97,8 +111,17 @@ html {
 
 body {
   font-family: var(--font-sans);
-  background-color: var(--color-background);
+  font-feature-settings: "ss01", "cv11";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   color: var(--color-foreground);
+  /* Two faint brand-colored glows behind everything, fixed so they don't scroll. */
+  background:
+    radial-gradient(1100px 620px at -10% -15%, oklch(0.75 0.15 156 / 8%), transparent 60%),
+    radial-gradient(900px 520px at 110% -10%, oklch(0.68 0.13 275 / 7%), transparent 60%),
+    var(--color-background);
+  background-attachment: fixed;
+  min-height: 100vh;
 }
 
 h1,
@@ -106,7 +129,41 @@ h2,
 h3,
 h4 {
   font-family: var(--font-heading);
-  letter-spacing: -0.02em;
+  letter-spacing: -0.025em;
+}
+
+::selection {
+  background: oklch(0.75 0.15 156 / 30%);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+input[type="range"] {
+  accent-color: var(--color-primary);
+}
+
+/* Tables: quieter headers and roomier, softly highlighted rows everywhere. */
+thead th {
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+tbody tr {
+  transition: background-color 120ms ease;
+}
+
+button,
+a {
+  transition-property: color, background-color, border-color, opacity, box-shadow, transform;
+  transition-duration: 150ms;
+}
+
+button:not(:disabled):active {
+  transform: translateY(1px);
 }
 
 * {

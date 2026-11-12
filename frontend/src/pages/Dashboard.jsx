@@ -46,7 +46,7 @@ function PlannedRow({ action }) {
   return (
     <Link
       to={action.player ? `/players/${action.player.id}` : '#'}
-      className="flex items-center gap-3 rounded-xl border border-border bg-surface p-4 hover:border-info/50"
+      className="flex items-center gap-3 panel p-4 hover:border-info/50"
     >
       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-info/15 text-xs font-bold text-info">
         {initials(action.player?.name)}
@@ -66,7 +66,7 @@ function WatchRow({ action }) {
   return (
     <Link
       to={action.player ? `/players/${action.player.id}` : '#'}
-      className="flex items-center gap-3 rounded-xl border border-border bg-surface p-4 hover:border-primary/50"
+      className="flex items-center gap-3 panel p-4 hover:border-primary/50"
     >
       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted-foreground/15 text-xs font-bold text-muted-foreground">
         {initials(action.player?.name)}
@@ -195,7 +195,7 @@ export default function Dashboard() {
 
   if (!data.hasTeamSelected) {
     return (
-      <div className="rounded-2xl border border-border bg-surface p-8 text-center">
+      <div className="panel p-8 text-center">
         <p className="text-lg font-semibold">Encara no tens cap equip seleccionat</p>
         <p className="mt-2 text-sm text-muted-foreground">Completa la configuració inicial per veure les teves recomanacions.</p>
         <Link to="/onboarding" className="mt-4 inline-block rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-background">
@@ -285,7 +285,7 @@ export default function Dashboard() {
       )}
 
       {!today || today.nothingToDoToday || allDone ? (
-        <div className="mt-8 flex flex-col items-center rounded-2xl border border-border bg-surface p-10 text-center">
+        <div className="mt-8 flex flex-col items-center panel p-10 text-center">
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-bull/15">
             <CheckIcon className="h-6 w-6 text-bull" />
           </div>

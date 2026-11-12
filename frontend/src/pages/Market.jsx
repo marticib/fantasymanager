@@ -75,7 +75,7 @@ function Pill({ active, onClick, children }) {
   return (
     <button
       onClick={onClick}
-      className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
+      className={`min-h-9 rounded-full border px-3.5 py-1.5 text-sm font-medium ${
         active ? 'border-primary bg-primary/15 text-primary' : 'border-border text-muted-foreground hover:border-primary/50'
       }`}
     >
@@ -115,7 +115,7 @@ function MarketRow({ row, onBid, onCancelBid }) {
             const eurDelta = own ?? row.externalTrend?.delta1d
             if (eurDelta == null) return <span className="text-muted-foreground">—</span>
             return (
-              <span className={eurDelta > 0 ? 'text-bull' : eurDelta < 0 ? 'text-bear' : 'text-muted-foreground'}>
+              <span className={`whitespace-nowrap ${eurDelta > 0 ? 'text-bull' : eurDelta < 0 ? 'text-bear' : 'text-muted-foreground'}`}>
                 {eurDelta >= 0 ? '↗' : '↘'} {formatDelta(eurDelta)}
                 {own == null && <span className="text-[11px] text-muted-foreground"> *ext.</span>}
               </span>
@@ -595,12 +595,12 @@ export default function Market() {
         </div>
       )}
 
-      <div className="mt-6 rounded-2xl border border-border bg-surface p-4">
+      <div className="mt-6 panel p-4">
         <input
           placeholder="Buscar jugador…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full rounded-lg border border-border bg-background px-4 py-2.5 text-sm outline-none focus:border-primary"
+          className="min-h-11 w-full rounded-xl border border-border bg-background/60 px-4 text-sm outline-none focus:border-primary focus:ring-4 focus:ring-primary/15"
         />
 
         <div className="mt-4 flex flex-wrap items-end gap-x-8 gap-y-4">
@@ -671,10 +671,10 @@ export default function Market() {
         )}
       </div>
 
-      <div className="mt-4 hidden overflow-x-auto rounded-xl border border-border bg-surface md:block">
+      <div className="mt-4 hidden overflow-x-auto panel md:block">
         <table className="w-full min-w-240 text-sm">
           <thead>
-            <tr className="border-b border-border text-left text-xs uppercase text-muted-foreground">
+            <tr className="border-b border-border bg-surface-raised/40 text-left text-[11px] uppercase text-muted-foreground">
               <th className="cursor-pointer select-none px-4 py-3 hover:text-foreground" onClick={() => toggleSort('change24h')}>
                 <span className="inline-flex items-center gap-1">
                   24H{sortArrow('change24h')}

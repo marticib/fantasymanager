@@ -262,15 +262,15 @@ export default function RivalTeam() {
         />
       </div>
 
-      <p className="mt-4 rounded-xl border border-border bg-surface px-4 py-3 text-sm text-muted-foreground">
+      <p className="mt-4 panel px-4 py-3 text-sm text-muted-foreground">
         Aquest no és el teu equip: aquí només es mostra si val la pena pagar-li la clàusula a cada jugador (com a
         /clàusules), mai un consell de mantenir o vendre — això només té sentit per als teus propis jugadors.
       </p>
 
-      <div className="mt-6 hidden overflow-x-auto rounded-xl border border-border bg-surface md:block">
+      <div className="mt-6 hidden overflow-x-auto panel md:block">
         <table className="w-full min-w-220 text-sm">
           <thead>
-            <tr className="border-b border-border text-left text-xs uppercase text-muted-foreground">
+            <tr className="border-b border-border bg-surface-raised/40 text-left text-[11px] uppercase text-muted-foreground">
               <th className="px-4 py-3">Jugador</th>
               <th className="px-4 py-3">Pos.</th>
               <th className="px-4 py-3">Valor</th>

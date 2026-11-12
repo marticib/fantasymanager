@@ -231,7 +231,7 @@ export default function Sales() {
       <h1 className="text-2xl font-bold tracking-tight">Vendes</h1>
       <p className="mt-1 text-sm text-muted-foreground">Jugadors propis que tens en venda al mercat ara mateix.</p>
 
-      <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-surface p-4">
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-3 panel p-4">
         <div>
           <p className="text-sm font-semibold">Posa automàticament tot l'equip al mercat</p>
           <p className="mt-0.5 text-xs text-muted-foreground">
@@ -252,15 +252,15 @@ export default function Sales() {
 
       {rows.length > 0 && (
         <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <div className="rounded-xl border border-border bg-surface p-4">
+          <div className="panel p-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">En venda</p>
             <p className="num mt-1 text-xl font-bold">{summary.count}</p>
           </div>
-          <div className="rounded-xl border border-border bg-surface p-4">
+          <div className="panel p-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Amb oferta rebuda</p>
             <p className="num mt-1 text-xl font-bold">{summary.withOffers}</p>
           </div>
-          <div className="rounded-xl border border-border bg-surface p-4">
+          <div className="panel p-4">
             <p className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Guany/Pèrdua{summary.profitKnownCount < summary.count ? ` (${summary.profitKnownCount}/${summary.count})` : ''}
               <InfoTip>
@@ -274,7 +274,7 @@ export default function Sales() {
         </div>
       )}
 
-      <details className="mt-4 rounded-xl border border-border bg-surface px-4 py-3 text-sm">
+      <details className="mt-4 panel px-4 py-3 text-sm">
         <summary className="cursor-pointer select-none font-semibold text-muted-foreground hover:text-foreground">Com funciona aquesta pàgina?</summary>
         <ul className="mt-3 list-disc space-y-1.5 pl-5 text-xs leading-relaxed text-muted-foreground">
           <li>
@@ -295,10 +295,10 @@ export default function Sales() {
         </ul>
       </details>
 
-      <div className="mt-4 hidden overflow-x-auto rounded-xl border border-border bg-surface md:block">
+      <div className="mt-4 hidden overflow-x-auto panel md:block">
         <table className="w-full min-w-200 text-sm">
           <thead>
-            <tr className="border-b border-border text-left text-xs uppercase text-muted-foreground">
+            <tr className="border-b border-border bg-surface-raised/40 text-left text-[11px] uppercase text-muted-foreground">
               <th className="px-4 py-3">Jugador</th>
               <th className="px-4 py-3">Pos.</th>
               <th className="px-4 py-3">

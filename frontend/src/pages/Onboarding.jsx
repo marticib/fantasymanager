@@ -139,7 +139,7 @@ export default function Onboarding() {
         Tres passos: connecta la teva sessió de LALIGA Fantasy, tria la lliga i sincronitza.
       </p>
 
-      <section className="mt-8 rounded-2xl border border-border bg-surface p-6">
+      <section className="mt-8 panel p-6">
         <h2 className="font-semibold">1. Sessió de LALIGA Fantasy</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           Enganxa el <code className="rounded bg-background px-1">access_token</code> (i si el tens, el{' '}
@@ -260,7 +260,7 @@ export default function Onboarding() {
         )}
       </section>
 
-      <section className="mt-6 rounded-2xl border border-border bg-surface p-6">
+      <section className="mt-6 panel p-6">
         <h2 className="font-semibold">2. Tria la teva lliga</h2>
         <button
           onClick={loadLeagues}
@@ -312,7 +312,7 @@ export default function Onboarding() {
         )}
       </section>
 
-      <section className="mt-6 rounded-2xl border border-border bg-surface p-6">
+      <section className="mt-6 panel p-6">
         <h2 className="font-semibold">3. Primera sincronització</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           Importa la teva plantilla, saldo, mercat i jugadors, i genera les primeres recomanacions.

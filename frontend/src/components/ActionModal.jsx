@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react'
 import { ACTION_DONE, emitAppEvent } from '../lib/appEvents'
 
 const CONFIRM_TONE = {
-  positive: 'bg-bull/20 text-bull hover:bg-bull/30',
-  danger: 'bg-bear/20 text-bear hover:bg-bear/30',
-  neutral: 'bg-primary/20 text-primary hover:bg-primary/30',
+  positive: 'bg-bull text-background hover:brightness-110',
+  danger: 'bg-bear text-background hover:brightness-110',
+  neutral: 'bg-primary text-background hover:brightness-110',
 }
 
 /**
@@ -54,12 +54,12 @@ export default function ActionModal({ request, onClose }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 sm:items-center"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/55 p-4 backdrop-blur-sm sm:items-center"
       onClick={result ? handleClose : undefined}
       role="dialog"
       aria-modal="true"
     >
-      <div className="panel elevated w-full max-w-sm p-6" onClick={(e) => e.stopPropagation()}>
+      <div className="panel elevated w-full max-w-md rounded-3xl p-6" onClick={(e) => e.stopPropagation()}>
         {!result ? (
           <>
             <h3 className="text-lg font-bold">{request.title}</h3>
@@ -69,7 +69,7 @@ export default function ActionModal({ request, onClose }) {
               <button
                 onClick={handleClose}
                 disabled={busy}
-                className="min-h-11 flex-1 rounded-lg border border-border text-sm font-semibold text-muted-foreground hover:text-foreground disabled:opacity-50"
+                className="min-h-11 flex-1 rounded-xl bg-surface-raised text-sm font-semibold text-muted-foreground hover:text-foreground disabled:opacity-50"
               >
                 Tornar
               </button>
@@ -77,7 +77,7 @@ export default function ActionModal({ request, onClose }) {
                 onClick={handleConfirm}
                 disabled={busy || request.confirmDisabled}
                 autoFocus
-                className={`min-h-11 flex-1 rounded-lg text-sm font-semibold disabled:opacity-50 ${CONFIRM_TONE[request.tone || 'positive']}`}
+                className={`min-h-11 flex-1 rounded-xl text-sm font-semibold disabled:opacity-50 ${CONFIRM_TONE[request.tone || 'positive']}`}
               >
                 {busy ? 'Enviant…' : request.confirmLabel}
               </button>
@@ -92,7 +92,7 @@ export default function ActionModal({ request, onClose }) {
             <button
               onClick={handleClose}
               autoFocus
-              className="mt-5 min-h-11 w-full rounded-lg bg-primary text-sm font-semibold text-background hover:opacity-90"
+              className="mt-5 min-h-11 w-full rounded-xl bg-primary text-sm font-semibold text-background hover:brightness-110"
             >
               Tancar
             </button>

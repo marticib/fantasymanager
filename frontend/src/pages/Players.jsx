@@ -157,7 +157,7 @@ export default function Players() {
       <h1 className="text-2xl font-bold tracking-tight">Jugadors</h1>
       <p className="mt-1 text-sm text-muted-foreground">{total ?? '…'} jugadors indexats a la lliga</p>
 
-      <div className="mt-4 flex items-center gap-2 rounded-2xl border border-border bg-surface px-4 py-3">
+      <div className="mt-4 flex items-center gap-2 panel px-4 py-3">
         <SearchIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
         <input
           placeholder="Buscar per nom o equip"
@@ -180,10 +180,10 @@ export default function Players() {
         </select>
       </div>
 
-      <div className="mt-4 hidden overflow-x-auto rounded-xl border border-border bg-surface md:block">
+      <div className="mt-4 hidden overflow-x-auto panel md:block">
         <table className="w-full min-w-240 text-sm">
           <thead>
-            <tr className="border-b border-border text-left text-xs uppercase text-muted-foreground">
+            <tr className="border-b border-border bg-surface-raised/40 text-left text-[11px] uppercase text-muted-foreground">
               <th className="cursor-pointer select-none px-4 py-3 hover:text-foreground" onClick={() => toggleSort('player')}>
                 Jugador{sortArrow('player')}
               </th>

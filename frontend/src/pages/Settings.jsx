@@ -77,7 +77,7 @@ export default function Settings() {
       <h1 className="text-2xl font-bold tracking-tight">Configuració</h1>
       <p className="mt-1 text-sm text-muted-foreground">Ajusta els llindars i pesos del motor de recomanacions.</p>
 
-      <section className="mt-6 rounded-2xl border border-border bg-surface p-6">
+      <section className="mt-6 panel p-6">
         <h2 className="font-semibold">Compte de LaLiga Fantasy</h2>
         {account?.hasTokens ? (
           <p className="mt-1 text-sm text-muted-foreground">
@@ -121,7 +121,7 @@ export default function Settings() {
       </section>
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <section className="rounded-2xl border border-border bg-surface p-6">
+        <section className="panel p-6">
           <h2 className="font-semibold">Regles</h2>
           <div className="mt-4 space-y-3">
             {Object.entries(rules).map(([key, value]) => (
@@ -138,7 +138,7 @@ export default function Settings() {
           </div>
         </section>
 
-        <section className="rounded-2xl border border-border bg-surface p-6">
+        <section className="panel p-6">
           <h2 className="font-semibold">Pesos de la puntuació</h2>
           <p className="mt-1 text-xs text-muted-foreground">Es normalitzen automàticament a 100.</p>
           <div className="mt-4 space-y-3">

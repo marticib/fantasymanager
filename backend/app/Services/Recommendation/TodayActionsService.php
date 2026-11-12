@@ -535,7 +535,7 @@ class TodayActionsService
         };
 
         return sprintf(
-            'ROI a 14 dies %s%%, recupera la inversió en %s.',
+            'Rendiment previst a 14 dies: %s%%, recupera la inversió en %s.',
             number_format($buy->expectedROI14d * 100, 1),
             $breakEven,
         );
@@ -623,7 +623,7 @@ class TodayActionsService
         };
 
         return sprintf(
-            'Clàusula ja desbloquejada — ROI a 14 dies %s%%, recupera la inversió en %s.',
+            'Clàusula ja desbloquejada — rendiment previst a 14 dies: %s%%, recupera la inversió en %s.',
             number_format($row['roi14d'] * 100, 1),
             $breakEven,
         );

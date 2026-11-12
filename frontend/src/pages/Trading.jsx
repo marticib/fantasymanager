@@ -27,7 +27,7 @@ export default function Trading() {
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex gap-1 rounded-xl border border-border bg-surface p-1" role="tablist">
+        <div className="flex gap-1 panel p-1" role="tablist">
           {TABS.map((t) => (
             <button
               key={t.key}

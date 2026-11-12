@@ -8,7 +8,7 @@ export function Pill({ active, onClick, children, title }) {
       type="button"
       title={title}
       onClick={onClick}
-      className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
+      className={`min-h-9 rounded-full border px-3.5 py-1.5 text-sm font-medium ${
         active ? 'border-primary bg-primary/15 text-primary' : 'border-border text-muted-foreground hover:border-primary/50'
       }`}
     >

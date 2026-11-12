@@ -58,7 +58,7 @@ function Pill({ active, onClick, children }) {
   return (
     <button
       onClick={onClick}
-      className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
+      className={`min-h-9 rounded-full border px-3.5 py-1.5 text-sm font-medium ${
         active ? 'border-primary bg-primary/15 text-primary' : 'border-border text-muted-foreground hover:border-primary/50'
       }`}
     >
@@ -69,7 +69,7 @@ function Pill({ active, onClick, children }) {
 
 function StatCard({ label, value, hint, accent }) {
   return (
-    <div className="rounded-2xl border border-border bg-surface p-5">
+    <div className="panel p-5">
       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
       <p className={`mt-2 text-2xl font-bold ${accent || ''}`}>{value}</p>
       {hint && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
@@ -245,7 +245,7 @@ function DecisionRow({ decision }) {
 
 function PerformanceCard({ label, value, hint, icon: Icon }) {
   return (
-    <div className="rounded-2xl border border-border bg-surface p-5">
+    <div className="panel p-5">
       <div className="flex items-center justify-between">
         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
         {Icon && <Icon className="h-4 w-4 text-muted-foreground" />}
@@ -305,7 +305,7 @@ export default function History() {
       </p>
 
       {rows.length === 0 ? (
-        <div className="mt-6 rounded-2xl border border-border bg-surface p-8 text-center">
+        <div className="mt-6 panel p-8 text-center">
           <p className="font-semibold">L'històric començarà a construir-se a partir d'aquesta sincronització.</p>
           <p className="mt-1 text-sm text-muted-foreground">
             No inventem una temporada passada — a partir d'ara cada sincronització queda registrada aquí.
@@ -332,7 +332,7 @@ export default function History() {
             />
           </div>
 
-          <div className="mt-6 rounded-2xl border border-border bg-surface p-5">
+          <div className="mt-6 panel p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 className="font-semibold">Evolució del valor de la plantilla</h2>
               <div className="flex gap-1 rounded-lg border border-border p-0.5">
@@ -368,7 +368,7 @@ export default function History() {
             </div>
           </div>
 
-          <div className="mt-4 overflow-hidden rounded-2xl border border-border bg-surface">
+          <div className="mt-4 overflow-hidden panel">
             <div className="border-b border-border px-4 py-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Valor per dia · desplega per veure el desglossament per jugador
@@ -386,7 +386,7 @@ export default function History() {
         <p className="mt-1 text-sm text-muted-foreground">Backtest real de les recomanacions econòmiques, mai una estadística inventada.</p>
 
         {!performance || performance.evaluatedCount === 0 ? (
-          <div className="mt-4 rounded-2xl border border-border bg-surface p-6 text-sm text-muted-foreground">
+          <div className="mt-4 panel p-6 text-sm text-muted-foreground">
             Encara no hi ha prou recomanacions avaluades.
             {performance?.pendingCount > 0 && (
               <> {performance.pendingCount} {performance.pendingCount === 1 ? 'recomanació pendent' : 'recomanacions pendents'} d'avaluació.</>
@@ -432,7 +432,7 @@ export default function History() {
           </div>
         </div>
 
-        <div className="mt-4 overflow-hidden rounded-2xl border border-border bg-surface">
+        <div className="mt-4 overflow-hidden panel">
           {!decisions ? (
             <BlockSkeleton rows={4} />
           ) : decisions.data.length === 0 ? (

@@ -309,7 +309,7 @@ export default function Team() {
             <div key={pos} className="panel p-4">
               {eyebrow(POSITION_LABELS[pos] || pos)}
               <p className="num mt-1 text-xl font-semibold">{stats.count}</p>
-              <p className="text-xs text-muted-foreground">Score mitjà {stats.averageScore ?? '—'}</p>
+              <p className="text-xs text-muted-foreground">Puntuació mitjana {stats.averageScore ?? '—'}</p>
             </div>
           ))}
         </div>
@@ -337,7 +337,7 @@ export default function Team() {
       )}
 
       {/* Desktop: dense table. Mobile: one card per player (see PlayerCard). */}
-      <div className="mt-6 hidden overflow-x-auto rounded-xl border border-border bg-surface md:block">
+      <div className="mt-6 hidden overflow-x-auto panel md:block">
         <table className="w-full min-w-220 text-sm">
           <thead>
             <tr className="border-b border-border text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
