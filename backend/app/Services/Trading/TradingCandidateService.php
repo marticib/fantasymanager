@@ -83,11 +83,16 @@ class TradingCandidateService
         $ownEntries = FantasyTeamPlayer::where('fantasy_team_id', $team->id)->with('player')->get()->filter(fn ($e) => $e->player);
         $ownIds = $ownEntries->pluck('fantasy_player_id')->all();
 
+        // Free-market listings only, same as Today's buy actions: a player another
+        // manager has listed is still on his team and only changes hands if that
+        // manager accepts an offer — not a market purchase this plan can count on.
+        // Rival-owned players stay reachable through their clause (below).
         $listings = FantasyMarketPlayer::where('fantasy_league_id', $league->id)
             ->where('is_on_market', true)
+            ->whereNull('seller_team_id')
             ->with(['player', 'sellerTeam'])
             ->get()
-            ->filter(fn (FantasyMarketPlayer $l) => $l->player && ! in_array($l->fantasy_player_id, $ownIds, true) && $l->seller_team_id !== $team->id);
+            ->filter(fn (FantasyMarketPlayer $l) => $l->player && ! in_array($l->fantasy_player_id, $ownIds, true));
 
         $clauseEntries = FantasyTeamPlayer::query()
             ->whereHas('team', fn ($q) => $q->where('fantasy_league_id', $league->id)->where('is_mine', false))

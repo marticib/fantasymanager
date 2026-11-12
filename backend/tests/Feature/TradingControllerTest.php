@@ -300,6 +300,19 @@ class TradingControllerTest extends TestCase
         $this->assertSame([$p->id], array_column($data['movements'], 'playerId'));
     }
 
+    public function test_a_player_listed_by_a_rival_is_never_a_market_buy_only_a_clause(): void
+    {
+        $p = $this->player('Rival Listed', 'FW', 10_000_000);
+        $this->ffRising($p);
+        $rivalEntry = $this->clause($p, 10_200_000);
+        $this->listing($p)->update(['seller_team_id' => $rivalEntry->fantasy_team_id]);
+
+        $data = $this->makeMoney();
+
+        $this->assertSame(['CLAUSE'], array_column($data['movements'], 'type'));
+        $this->assertSame(0, $data['market']['listings']);
+    }
+
     public function test_a_clause_locked_beyond_the_horizon_is_reported_but_never_proposed(): void
     {
         $p = $this->player('Locked', 'FW', 10_000_000);
