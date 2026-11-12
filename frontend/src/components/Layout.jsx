@@ -32,7 +32,8 @@ import {
 const NAV_ITEMS = [
   { to: '/', label: 'Avui', end: true, icon: Zap },
   { to: '/market', label: 'Mercat', icon: ShoppingBag, badge: 'market', badgeHelp: 'ofertes teves actives' },
-  { to: '/sales', label: 'Vendes', icon: Tag, badge: 'sales', badgeHelp: 'jugadors teus amb oferta' },
+  // No badge: the whole squad is usually listed with LaLiga's standing offer, so a count would always show.
+  { to: '/sales', label: 'Vendes', icon: Tag },
   { to: '/team', label: 'El meu equip', short: 'Equip', icon: Users },
   { to: '/clauses', label: 'Clàusules', icon: Shield, badge: 'clauses', badgeHelp: 'compres automàtiques per confirmar' },
   { to: '/trading', label: 'Trading', icon: TrendingUp },
