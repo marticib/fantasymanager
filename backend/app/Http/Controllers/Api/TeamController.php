@@ -17,6 +17,7 @@ use App\Services\Recommendation\FantasySettingsService;
 use App\Services\Recommendation\PlayerDecisionEngine;
 use App\Services\Recommendation\PlayerTrendPresenter;
 use App\Services\Recommendation\RivalClausePresenter;
+use App\Services\Recommendation\RosterValueHistoryService;
 use App\Services\Recommendation\TeamValueDeltaService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -104,7 +105,7 @@ class TeamController extends Controller
      * like the individual player page's own OWNED_BY_RIVAL context (reused
      * here per player, not re-derived).
      */
-    public function rival(Request $request, FantasyTeam $team, PlayerTrendPresenter $presenter, RivalClausePresenter $rivalClausePresenter)
+    public function rival(Request $request, FantasyTeam $team, PlayerTrendPresenter $presenter, RivalClausePresenter $rivalClausePresenter, RosterValueHistoryService $rosterHistory)
     {
         $account = $this->currentAccount($request);
 
@@ -154,16 +155,23 @@ class TeamController extends Controller
         // formula that sync uses, rather than left blank.
         $teamValue = $team->team_value ?? $players->sum(fn (array $p) => $p['marketValue'] ?? 0);
 
+        // What his current squad gained or lost in value — last 24h and day by day.
+        $squad = $team->players()->get();
+        $delta24h = $rosterHistory->delta24h($squad);
+
         return response()->json([
             'team' => new FantasyTeamResource($team),
             'summary' => [
                 'teamValue' => $teamValue,
+                'teamValueDelta24h' => $delta24h['delta'] ?? null,
+                'teamValueDelta24hPct' => $delta24h['pct'] ?? null,
                 // Cash has no data source for a rival at all — LaLiga only
                 // exposes the "money" endpoint for the account's own team
                 // (see FantasySyncService::syncTeam()) — never guessed.
                 'cash' => null,
             ],
             'players' => $players,
+            'daily' => $rosterHistory->daily($squad, 7),
         ]);
     }
 

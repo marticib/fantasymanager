@@ -3,7 +3,9 @@ import { Link, useParams } from 'react-router-dom'
 import apiClient from '../api/client'
 import Sparkline from '../components/Sparkline'
 import { TrendingUpIcon, WalletIcon, ChevronDownIcon } from '../components/Icons'
-import { formatMoneyM, formatPercent, POSITION_LABELS, initials, ACTION_LABELS } from '../utils/format'
+import { formatDelta, formatFullDate, formatMoneyM, formatPercent, POSITION_LABELS, initials, ACTION_LABELS } from '../utils/format'
+import ChangeBadge from '../components/ChangeBadge'
+import CountUp from '../components/CountUp'
 import { PageSkeleton, ErrorState } from '../components/PageState'
 import InfoTip from '../components/InfoTip'
 
@@ -23,6 +25,23 @@ function scoreBadgeClass(score) {
   return 'bg-warn/15 text-warn'
 }
 
+/** 24h value move: our own history first, futbolfantasy's 1-day figure (flagged *ext.) when we have none yet. */
+function player24hDelta(p) {
+  const own = p.trend?.change24h
+  return { eurDelta: own ?? p.externalTrend?.delta1d ?? null, isOwn: own != null }
+}
+
+function Delta24h({ p }) {
+  const { eurDelta, isOwn } = player24hDelta(p)
+  if (eurDelta == null) return <span className="text-muted-foreground">—</span>
+  return (
+    <span className={`num whitespace-nowrap ${eurDelta > 0 ? 'text-bull' : eurDelta < 0 ? 'text-bear' : 'text-muted-foreground'}`}>
+      {eurDelta >= 0 ? '↗' : '↘'} {formatDelta(eurDelta)}
+      {!isOwn && <span className="text-[11px] text-muted-foreground"> *ext.</span>}
+    </span>
+  )
+}
+
 function ScoreStat({ label, value, colorClass }) {
   return (
     <div className="text-center">
@@ -40,6 +59,9 @@ function PlayerRow({ p }) {
   return (
     <>
       <tr className="border-b border-border last:border-0 hover:bg-surface-raised">
+        <td className="px-4 py-3">
+          <Delta24h p={p} />
+        </td>
         <td className="px-4 py-3">
           <Link to={`/players/${p.id}`} className="flex items-center gap-2.5 hover:text-primary">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted-foreground/15 text-[11px] font-bold text-muted-foreground">
@@ -106,7 +128,7 @@ function PlayerRow({ p }) {
       </tr>
       {open && raw && (
         <tr className="border-b border-border bg-background/40 last:border-0">
-          <td colSpan={9} className="px-4 py-4">
+          <td colSpan={10} className="px-4 py-4">
             <div className="grid gap-4 lg:grid-cols-[1fr_auto]">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -165,6 +187,9 @@ function PlayerCard({ p }) {
       <div className="mt-3 flex items-end justify-between gap-3">
         <div>
           <p className="num text-2xl font-semibold">{formatMoneyM(p.marketValue)}</p>
+          <p className="mt-1 text-xs">
+            <Delta24h p={p} /> <span className="text-muted-foreground">en 24h</span>
+          </p>
           <p className="num mt-1 text-xs text-muted-foreground">Clàusula {p.clauseValue ? formatMoneyM(p.clauseValue) : '—'}</p>
         </div>
         {p.history?.length > 1 && (
@@ -252,8 +277,22 @@ export default function RivalTeam() {
         {team.players.length} jugadors
       </p>
 
-      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <StatTile icon={TrendingUpIcon} label="Valor plantilla" value={formatMoneyM(team.summary?.teamValue)} accent="bull" />
+      <div className="stagger mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <StatTile
+          icon={TrendingUpIcon}
+          label="Valor plantilla"
+          value={<CountUp value={team.summary?.teamValue} format={formatMoneyM} />}
+          hint={
+            team.summary?.teamValueDelta24h != null ? (
+              <>
+                <ChangeBadge change={team.summary.teamValueDelta24h} changePct={team.summary.teamValueDelta24hPct} /> en 24h
+              </>
+            ) : (
+              'Encara no hi ha prou historial per calcular la variació de 24h.'
+            )
+          }
+          accent="bull"
+        />
         <StatTile
           icon={WalletIcon}
           label="Saldo"
@@ -268,9 +307,14 @@ export default function RivalTeam() {
       </p>
 
       <div className="mt-6 hidden overflow-x-auto panel md:block">
-        <table className="w-full min-w-220 text-sm">
+        <table className="w-full min-w-240 text-sm">
           <thead>
             <tr className="border-b border-border bg-surface-raised/40 text-left text-[11px] uppercase text-muted-foreground">
+              <th className="px-4 py-3">
+                <span className="inline-flex items-center gap-1">
+                  24H <InfoTip>Quant ha pujat o baixat el valor de mercat del jugador en les últimes 24 hores.</InfoTip>
+                </span>
+              </th>
               <th className="px-4 py-3">Jugador</th>
               <th className="px-4 py-3">Pos.</th>
               <th className="px-4 py-3">Valor</th>
@@ -301,6 +345,26 @@ export default function RivalTeam() {
           <PlayerCard key={p.id} p={p} />
         ))}
       </div>
+
+      {team.daily?.some((d) => d.change !== null) && (
+        <div className="mt-6 panel p-5">
+          <h2 className="font-semibold">Guany diari</h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Quant ha guanyat o perdut cada dia la seva plantilla actual pel canvi de valor dels jugadors (els fitxatges i vendes no compten).
+          </p>
+          <div className="stagger mt-3 divide-y divide-border">
+            {[...team.daily].reverse().map((row) => (
+              <div key={row.day} className="flex items-center justify-between gap-3 py-2.5 text-sm">
+                <span className="capitalize text-muted-foreground">{formatFullDate(new Date(`${row.day}T12:00:00`))}</span>
+                <div className="flex items-center gap-3">
+                  <span className="num font-medium">{formatMoneyM(row.value)}</span>
+                  <ChangeBadge change={row.change} changePct={row.changePct} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
