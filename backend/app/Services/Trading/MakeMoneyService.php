@@ -3,6 +3,7 @@
 namespace App\Services\Trading;
 
 use App\Models\FantasyAccount;
+use App\Services\Recommendation\MarketValueProjector;
 
 /**
  * "Guanyar diners": with the capital you really have — cash now plus what
@@ -23,12 +24,14 @@ use App\Models\FantasyAccount;
  * A rival clause that is still locked today but unlocks before the horizon is
  * a real option for that horizon (pay it on the unlock day, hold until the
  * horizon): it competes for the same capital, flagged with `payableInDays`.
+ * Only the days you would actually own him count — see withUnlockWindow().
  */
 class MakeMoneyService
 {
     public function __construct(
         private readonly TradingCandidateService $candidates,
         private readonly PortfolioOptimizer $optimizer,
+        private readonly MarketValueProjector $projector,
     ) {}
 
     /** @return array<string, mixed> */
@@ -135,14 +138,9 @@ class MakeMoneyService
             ?: $a['playerId'] <=> $b['playerId']);
         foreach ($buyRows as $c) {
             $view = $this->candidates->view($c, $horizon);
-            $explanation = TradingExplainer::forRow($c, $horizon, $c['source']);
-            if (($c['payableInDays'] ?? null) !== null) {
-                $explanation = sprintf(
-                    'Encara blindada: es podrà pagar d\'aquí %d %s, si el rival no puja la clàusula abans. ',
-                    $c['payableInDays'],
-                    $c['payableInDays'] === 1 ? 'dia' : 'dies',
-                ).$explanation;
-            }
+            $explanation = ($c['payableInDays'] ?? null) !== null
+                ? $this->laterClauseExplanation($c, $horizon)
+                : TradingExplainer::forRow($c, $horizon, $c['source']);
             $movements[] = $view + [
                 'type' => $c['source'] === 'CLAUSE' ? 'CLAUSE' : 'BUY',
                 'payableInDays' => $c['payableInDays'] ?? null,
@@ -185,9 +183,14 @@ class MakeMoneyService
 
     /**
      * A clause that is locked today but unlocks before the horizon can still
-     * be paid within it — same projected value at the horizon, same cost — so
-     * for this horizon it is a regular (later) option. Shielded clauses and
-     * ones unlocking at or after the horizon stay excluded.
+     * be paid within it, so for this horizon it is a regular (later) option.
+     * Shielded clauses and ones unlocking at or after the horizon stay excluded.
+     *
+     * Only the days you would own him count: you pay on the unlock day the
+     * clause or, if his value has overtaken it by then, that value (a clause
+     * never stays below the player's value), and the gain is his projected
+     * value at the horizon minus that price. Growth while he is still the
+     * rival's is never credited to you.
      *
      * @param  array<string, mixed>  $candidate
      * @return array<string, mixed>
@@ -204,7 +207,47 @@ class MakeMoneyService
             return array_merge($candidate, ['excludeReason' => 'LOW_CONFIDENCE']);
         }
 
-        return array_merge($candidate, ['eligible' => true, 'excludeReason' => null, 'payableInDays' => $days]);
+        $valueAtUnlock = $this->projector->project(
+            (float) $candidate['economicValue'],
+            (float) ($candidate['growth']['expectedDailyGrowth'] ?? 0.0),
+            $days,
+        );
+        $cost = (int) round(max((float) $candidate['clauseValue'], $valueAtUnlock));
+        $profit = (int) round($candidate['projected'][$horizon] - $cost);
+
+        $candidate['profit'][$horizon] = $profit;
+        $candidate['roi'][$horizon] = $cost > 0 ? $profit / $cost : null;
+
+        return array_merge($candidate, [
+            'eligible' => true,
+            'excludeReason' => null,
+            'payableInDays' => $days,
+            'ownedDays' => $horizon - $days,
+            'valueAtUnlock' => (int) round($valueAtUnlock),
+            'acquisitionCost' => $cost,
+        ]);
+    }
+
+    /** @param array<string, mixed> $c */
+    private function laterClauseExplanation(array $c, int $horizon): string
+    {
+        $days = $c['payableInDays'];
+        $owned = $c['ownedDays'];
+
+        return sprintf(
+            'Encara blindada: es podrà pagar d\'aquí %d %s, si el rival no puja la clàusula abans. Pagaries %s (%s) i només el tindries %d %s: benefici esperat a %dD %s (rendiment %s). No es compta el que s\'hagi revaloritzat abans que sigui teu.',
+            $days,
+            $days === 1 ? 'dia' : 'dies',
+            TradingExplainer::money($c['acquisitionCost']),
+            $c['acquisitionCost'] > $c['clauseValue']
+                ? 'el valor previst aquell dia, que ja haurà superat la clàusula de '.TradingExplainer::money($c['clauseValue'])
+                : 'la clàusula',
+            $owned,
+            $owned === 1 ? 'dia' : 'dies',
+            $horizon,
+            TradingExplainer::signedMoney($c['profit'][$horizon]),
+            TradingExplainer::percent($c['roi'][$horizon]),
+        );
     }
 
     /**

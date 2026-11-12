@@ -61,7 +61,7 @@ final class TradingExplainer
         return match ($role) {
             'OWN' => self::ownLine($row, $horizon),
             'MARKET' => sprintf(
-                'Puja recomanada %s (MaxBid %s). Benefici esperat a %dD: %s (ROI %s).',
+                'Puja recomanada %s (màxim %s). Benefici esperat a %dD: %s (rendiment %s).',
                 self::money($row['acquisitionCost']),
                 self::money($row['maxBid']),
                 $horizon,
@@ -69,7 +69,7 @@ final class TradingExplainer
                 self::percent($row['roi'][$horizon] ?? null),
             ),
             'CLAUSE' => sprintf(
-                'Clàusula de %s. Benefici esperat a %dD: %s (ROI %s).',
+                'Clàusula de %s. Benefici esperat a %dD: %s (rendiment %s).',
                 self::money($row['acquisitionCost']),
                 $horizon,
                 self::signedMoney($row['profit'][$horizon] ?? null),

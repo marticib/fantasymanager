@@ -342,6 +342,29 @@ class TradingControllerTest extends TestCase
         $this->assertSame(2, $short['movements'][0]['payableInDays'] ?? null);
     }
 
+    public function test_a_later_clause_only_counts_the_days_you_would_own_him(): void
+    {
+        // Clause equal to today's value and a rising player: by the unlock day
+        // he is worth more than the clause, so that is what you'd pay.
+        $later = $this->player('Unlocks later', 'FW', 10_000_000);
+        $this->ffRising($later);
+        $this->clause($later, 10_000_000, ['clause_locked_until' => now()->addDays(10)]);
+
+        $now = $this->player('Payable now', 'FW', 10_000_000);
+        $this->ffRising($now);
+        $this->clause($now, 10_000_000);
+
+        $moves = collect($this->makeMoney('?horizon=14')['movements'])->keyBy('playerId');
+        $lateMove = $moves[$later->id];
+
+        $this->assertSame(10, $lateMove['payableInDays']);
+        $this->assertGreaterThan(10_000_000, $lateMove['cost']);
+        $this->assertSame($lateMove['projectedValue'] - $lateMove['cost'], $lateMove['gain']);
+        // Same player profile, but 4 owned days instead of 14: far less gain.
+        $this->assertLessThan($moves[$now->id]['gain'] / 2, $lateMove['gain']);
+        $this->assertStringContainsString('només el tindries 4 dies', $lateMove['explanation']);
+    }
+
     public function test_a_shielded_clause_is_never_proposed_whatever_the_horizon(): void
     {
         $p = $this->player('Shielded', 'FW', 10_000_000);
