@@ -251,6 +251,30 @@ class TradingControllerTest extends TestCase
         $this->assertSame([], array_filter($data['holds'], fn ($h) => $h['playerId'] === $mine->id), 'a sold player is not also a hold');
     }
 
+    public function test_with_sales_turned_off_no_own_player_is_ever_sold(): void
+    {
+        $this->myTeam->update(['money' => 3_500_000]); // nothing deployable after the reserve
+        $mine = $this->player('Mine', 'MF', 12_000_000);
+        $this->ff($mine, 12_000_000, 11_990_000, 11_980_000, 11_960_000);
+        $this->own($mine);
+        $target = $this->player('Riser', 'FW', 10_000_000);
+        $this->ffRising($target);
+        $this->listing($target);
+
+        $data = $this->makeMoney('?allow_sales=0');
+        $plans = $this->plans('?allow_sales=0');
+
+        // The same purchase the sale would have funded is now out of reach.
+        $this->assertSame('KEEP_CASH', $data['state']);
+        $this->assertSame([], $data['movements']);
+        $this->assertFalse($data['capital']['salesAllowed']);
+        $this->assertSame(0, $data['capital']['possibleCapitalFromSales']);
+        $this->assertSame([$mine->id], array_column($data['holds'], 'playerId'));
+        foreach ($plans['plans'] as $plan) {
+            $this->assertSame([], array_filter($plan['movements'], fn ($m) => $m['type'] === 'SELL'));
+        }
+    }
+
     public function test_a_falling_own_player_is_sold_to_avoid_the_expected_loss_and_no_purchase_is_forced(): void
     {
         $mine = $this->player('Faller', 'MF', 10_000_000);

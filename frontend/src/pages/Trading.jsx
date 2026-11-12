@@ -22,6 +22,26 @@ function gainClass(value) {
   return value > 0 ? 'text-bull' : value < 0 ? 'text-bear' : 'text-muted-foreground'
 }
 
+/** A pill-shaped on/off switch with its label. */
+function Toggle({ checked, onChange, children }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      className={`inline-flex min-h-10 items-center gap-2.5 rounded-full border px-3.5 text-sm font-medium ${
+        checked ? 'border-primary/50 bg-primary/10 text-foreground' : 'border-border text-muted-foreground hover:text-foreground'
+      }`}
+    >
+      <span className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${checked ? 'bg-primary' : 'bg-surface-raised'}`}>
+        <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-foreground transition-all ${checked ? 'left-[18px]' : 'left-0.5'}`} />
+      </span>
+      {children}
+    </button>
+  )
+}
+
 function HorizonCard({ horizon, plan, active, best, onSelect }) {
   const gain = plan?.summary?.netExpectedGain ?? null
   const moves = plan?.movements?.length ?? 0
@@ -143,6 +163,7 @@ export default function Trading() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [respectReserve, setRespectReserve] = usePersistentState('trading-respect-reserve', true)
+  const [allowSales, setAllowSales] = usePersistentState('trading-allow-sales', true)
   const [selected, setSelected] = usePersistentState('trading-horizon', null)
   const [pendingBid, setPendingBid] = useState(null)
 
@@ -150,13 +171,13 @@ export default function Trading() {
     setLoading(true)
     setError('')
     apiClient
-      .get('/trading/plans', { params: { respect_reserve: respectReserve ? 1 : 0 } })
+      .get('/trading/plans', { params: { respect_reserve: respectReserve ? 1 : 0, allow_sales: allowSales ? 1 : 0 } })
       .then((res) => setPayload(res.data))
       .catch((err) => setError(err.response?.data?.message || "No s'han pogut calcular els plans."))
       .finally(() => setLoading(false))
   }
 
-  useEffect(load, [respectReserve])
+  useEffect(load, [respectReserve, allowSales])
   useAppEvent(DATA_CHANGED, load)
 
   if (error && !payload) return <ErrorState message={error} onRetry={load} />
@@ -209,19 +230,22 @@ export default function Trading() {
         </div>
       )}
 
-      <div className="mt-6 grid grid-cols-3 gap-2 sm:gap-4">
+      <div className="mt-5 flex flex-wrap gap-2">
+        <Toggle checked={allowSales} onChange={setAllowSales}>
+          Permetre vendre jugadors meus
+        </Toggle>
+        <Toggle checked={respectReserve} onChange={setRespectReserve}>
+          Guardar la reserva mínima{respectReserve && capital.minimumCashReserve ? ` (${formatMoneyM(capital.minimumCashReserve)})` : ''}
+        </Toggle>
+      </div>
+
+      <div className="mt-4 grid grid-cols-3 gap-2 sm:gap-4">
         {HORIZONS.map((h) => (
           <HorizonCard key={h} horizon={h} plan={data.plans[h]} active={h === horizon} best={h === data.bestHorizon} onSelect={() => setSelected(h)} />
         ))}
       </div>
 
-      <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-xl font-bold">Pla a {horizon} dies</h2>
-        <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
-          <input type="checkbox" checked={respectReserve} onChange={(e) => setRespectReserve(e.target.checked)} className="h-4 w-4 accent-primary" />
-          Guardar la reserva mínima ({formatMoneyM(capital.minimumCashReserve || null)})
-        </label>
-      </div>
+      <h2 className="mt-6 text-xl font-bold">Pla a {horizon} dies</h2>
 
       <div className="panel mt-3 grid grid-cols-2 gap-4 p-4 sm:grid-cols-4 sm:p-5">
         <div>
@@ -232,7 +256,11 @@ export default function Trading() {
         </div>
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">De vendes</p>
-          <p className="num mt-1 text-lg font-bold">{formatMoney(summary.capitalFromSales)}</p>
+          {allowSales ? (
+            <p className="num mt-1 text-lg font-bold">{formatMoney(summary.capitalFromSales)}</p>
+          ) : (
+            <p className="mt-1 text-lg font-semibold text-muted-foreground">Desactivat</p>
+          )}
         </div>
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Inverteixes</p>

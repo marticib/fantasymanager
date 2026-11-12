@@ -35,7 +35,7 @@ class MakeMoneyService
     ) {}
 
     /** @return array<string, mixed> */
-    public function build(FantasyAccount $account, int $horizon, bool $respectReserve = true): array
+    public function build(FantasyAccount $account, int $horizon, bool $respectReserve = true, bool $allowSales = true): array
     {
         $pool = $this->candidates->pool($account);
 
@@ -43,7 +43,7 @@ class MakeMoneyService
             return ['state' => 'NO_LEAGUE', 'horizon' => $horizon, 'movements' => [], 'message' => 'Encara no hi ha cap lliga activa.'];
         }
 
-        return $this->plan($pool, $horizon, $respectReserve);
+        return $this->plan($pool, $horizon, $respectReserve, $allowSales);
     }
 
     /**
@@ -52,7 +52,7 @@ class MakeMoneyService
      *
      * @return array<string, mixed>
      */
-    public function buildAll(FantasyAccount $account, bool $respectReserve = true): array
+    public function buildAll(FantasyAccount $account, bool $respectReserve = true, bool $allowSales = true): array
     {
         $pool = $this->candidates->pool($account);
 
@@ -62,7 +62,7 @@ class MakeMoneyService
 
         $plans = [];
         foreach (TradingCandidateService::HORIZONS as $horizon) {
-            $plans[$horizon] = $this->plan($pool, $horizon, $respectReserve);
+            $plans[$horizon] = $this->plan($pool, $horizon, $respectReserve, $allowSales);
         }
 
         $bestHorizon = null;
@@ -82,7 +82,10 @@ class MakeMoneyService
      * @param  array<string, mixed>  $pool  TradingCandidateService::pool()
      * @return array<string, mixed>
      */
-    private function plan(array $pool, int $horizon, bool $respectReserve): array
+    /**
+     * @param  bool  $allowSales  false = only spend the cash you have; never propose selling your own players
+     */
+    private function plan(array $pool, int $horizon, bool $respectReserve, bool $allowSales = true): array
     {
         $cash = $pool['cash'];
         $reserve = $respectReserve ? (int) $pool['rules']['minimum_cash_reserve'] : 0;
@@ -103,8 +106,11 @@ class MakeMoneyService
         }
 
         // Own players we can price a sale for AND whose evolution is known —
-        // a missing figure is never treated as "no change".
-        $sellable = array_values(array_filter($pool['own'], fn ($o) => $o['salePrice'] !== null && $o['projected'] !== null));
+        // a missing figure is never treated as "no change". None at all when
+        // the user asked to keep the whole squad.
+        $sellable = $allowSales
+            ? array_values(array_filter($pool['own'], fn ($o) => $o['salePrice'] !== null && $o['projected'] !== null))
+            : [];
         $possibleFromSales = (int) array_sum(array_column($sellable, 'salePrice'));
 
         $result = $this->optimizer->optimize(
@@ -163,6 +169,7 @@ class MakeMoneyService
                 'currentCash' => $cash,
                 'minimumCashReserve' => $reserve,
                 'reserveRespected' => $respectReserve,
+                'salesAllowed' => $allowSales,
                 'deployableCash' => $deployableCash,
                 'possibleCapitalFromSales' => $possibleFromSales,
                 'totalDeployableCapital' => $deployableCash + $possibleFromSales,

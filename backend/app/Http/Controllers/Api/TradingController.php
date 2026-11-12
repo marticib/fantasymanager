@@ -33,8 +33,14 @@ class TradingController extends Controller
             return $this->invalidHorizon();
         }
         $respectReserve = $request->boolean('respect_reserve', true);
+        $allowSales = $request->boolean('allow_sales', true);
 
-        return $this->respond($account, 'make-money', ['horizon' => $horizon, 'reserve' => $respectReserve], fn () => $service->build($account, $horizon, $respectReserve));
+        return $this->respond(
+            $account,
+            'make-money',
+            ['horizon' => $horizon, 'reserve' => $respectReserve, 'sales' => $allowSales],
+            fn () => $service->build($account, $horizon, $respectReserve, $allowSales),
+        );
     }
 
     /** The money-making plan for every horizon (3/7/14 days) in one response. */
@@ -42,8 +48,14 @@ class TradingController extends Controller
     {
         $account = $this->currentAccount($request);
         $respectReserve = $request->boolean('respect_reserve', true);
+        $allowSales = $request->boolean('allow_sales', true);
 
-        return $this->respond($account, 'plans', ['reserve' => $respectReserve], fn () => $service->buildAll($account, $respectReserve));
+        return $this->respond(
+            $account,
+            'plans',
+            ['reserve' => $respectReserve, 'sales' => $allowSales],
+            fn () => $service->buildAll($account, $respectReserve, $allowSales),
+        );
     }
 
     private function horizon(Request $request): ?int
