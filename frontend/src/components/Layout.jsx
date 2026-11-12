@@ -254,7 +254,7 @@ function NotificationBell({ unread, onChanged }) {
         <CountBadge count={unread} className="absolute -right-1.5 -top-1.5" />
       </button>
       {open && (
-        <div className="panel elevated fixed inset-x-3 top-16 z-40 flex max-h-[70vh] origin-top-right animate-pop flex-col sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-96">
+        <div className="panel elevated fixed inset-x-3 top-[calc(4rem+env(safe-area-inset-top))] z-40 flex max-h-[70vh] origin-top-right animate-pop flex-col sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-96">
           <div className="flex items-center justify-between border-b border-border px-4 py-3">
             <p className="text-sm font-semibold">Avisos</p>
             {alerts?.some((a) => !a.read) && (
@@ -575,7 +575,8 @@ export default function Layout() {
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Header + desktop menu stick together. The header row never wraps: on
             mobile it keeps only logo, league, sync, bell and avatar. */}
-        <div className="glass sticky top-0 z-30 border-b border-border">
+        {/* In the installed iPhone app the page runs under the status bar: pad by its height (0 elsewhere). */}
+        <div className="glass sticky top-0 z-30 border-b border-border pt-[env(safe-area-inset-top)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
           <header className="flex flex-nowrap items-center justify-between gap-2 px-3 py-2.5 sm:gap-3 sm:px-6 lg:px-10">
             <div className="flex min-w-0 flex-nowrap items-center gap-2 sm:gap-3">
               <Link to="/" className="flex shrink-0 items-center gap-2.5" aria-label="Avui">

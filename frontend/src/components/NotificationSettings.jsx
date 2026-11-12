@@ -144,7 +144,6 @@ export default function NotificationSettings() {
   }
 
   const telegramBody = () => {
-    if (!channels.telegram.configured) return <p>Encara no està activat al servidor (cal crear un bot amb @BotFather; mira les instruccions de desplegament).</p>
     if (channels.telegram.connected) {
       return (
         <>
@@ -192,9 +191,12 @@ export default function NotificationSettings() {
           <Row icon={Smartphone} title="Mòbil i navegador">
             {pushBody()}
           </Row>
-          <Row icon={Send} title="Telegram">
-            {telegramBody()}
-          </Row>
+          {/* Only offered once the server has a bot configured (optional). */}
+          {channels.telegram.configured && (
+            <Row icon={Send} title="Telegram">
+              {telegramBody()}
+            </Row>
+          )}
           <Row icon={Bell} title="Què t'avisarem">
             <ul className="mt-1 grid gap-x-6 gap-y-1 sm:grid-cols-2">
               {WHAT_YOU_GET.map((w) => (
