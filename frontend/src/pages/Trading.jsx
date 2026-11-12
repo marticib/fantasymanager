@@ -8,6 +8,7 @@ import { PageSkeleton, EmptyState, ErrorState } from '../components/PageState'
 import { DATA_CHANGED, useAppEvent } from '../lib/appEvents'
 import { usePersistentState } from '../lib/storage'
 import { formatDelta, formatMoney, formatMoneyM, initials, POSITION_LABELS } from '../utils/format'
+import CountUp from '../components/CountUp'
 
 const HORIZONS = [3, 7, 14]
 
@@ -57,7 +58,7 @@ function HorizonCard({ horizon, plan, active, best, onSelect }) {
         {best && <span className="hidden rounded-full bg-primary/15 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-primary sm:inline">Millor</span>}
       </div>
       <p className={`num mt-1.5 text-lg font-bold sm:mt-2 sm:text-3xl ${gain > 0 ? 'text-bull' : 'text-muted-foreground'}`}>
-        {gain > 0 ? formatDelta(gain) : '0 €'}
+        {gain > 0 ? <CountUp value={gain} format={formatDelta} /> : '0 €'}
       </p>
       <p className="mt-1 text-[11px] text-muted-foreground sm:text-xs">
         {moves === 0 ? 'No fer res' : `${moves} ${moves === 1 ? 'moviment' : 'moviments'}`}
@@ -158,7 +159,7 @@ function MoveGroup({ title, total, totalLabel, moves, horizon, onBid, onKeep }) 
           {totalLabel} <span className="num font-semibold text-foreground">{formatMoney(total)}</span>
         </p>
       </div>
-      <div className="divide-y divide-border">
+      <div className="stagger divide-y divide-border">
         {moves.map((move) => (
           <MoveRow key={`${move.type}-${move.playerId}`} move={move} horizon={horizon} onBid={onBid} onKeep={onKeep} />
         ))}
@@ -255,7 +256,7 @@ export default function Trading() {
         </Toggle>
       </div>
 
-      <div className="mt-4 grid grid-cols-3 gap-2 sm:gap-4">
+      <div className="stagger mt-4 grid grid-cols-3 gap-2 sm:gap-4">
         {HORIZONS.map((h) => (
           <HorizonCard key={h} horizon={h} plan={data.plans[h]} active={h === horizon} best={h === data.bestHorizon} onSelect={() => setSelected(h)} />
         ))}
@@ -312,7 +313,7 @@ export default function Trading() {
             </InfoTip>
           </p>
           <p className={`num mt-1 text-lg font-bold ${gainClass(summary.netExpectedGain)}`}>
-            {summary.netExpectedGain !== null ? formatDelta(summary.netExpectedGain) : '—'}
+            {summary.netExpectedGain !== null ? <CountUp value={summary.netExpectedGain} format={formatDelta} /> : '—'}
           </p>
         </div>
       </div>
@@ -325,7 +326,7 @@ export default function Trading() {
           message={plan.keepCash?.message || 'Cap compra disponible guanya prou per sobre del mínim configurat.'}
         />
       ) : (
-        <div className="mt-4 space-y-4">
+        <div key={horizon} className="mt-4 space-y-4">
           <MoveGroup
             title="1. Vendre"
             totalLabel="Cobres"

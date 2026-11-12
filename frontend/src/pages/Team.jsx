@@ -8,6 +8,7 @@ import { formatMoneyM, formatPercent, formatDelta, formatFullDate, POSITION_LABE
 import { PageSkeleton, ErrorState } from '../components/PageState'
 import { DATA_CHANGED, useAppEvent } from '../lib/appEvents'
 import InfoTip from '../components/InfoTip'
+import CountUp from '../components/CountUp'
 
 const ACTION_BADGE = {
   SELL: 'bg-bear-soft text-bear',
@@ -279,11 +280,11 @@ export default function Team() {
       <h1 className="text-3xl font-semibold tracking-tight">La meva plantilla</h1>
       <p className="mt-1 text-sm text-muted-foreground">{team.players.length} jugadors</p>
 
-      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="stagger mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <StatTile
           icon={TrendingUp}
           label="Valor plantilla"
-          value={formatMoneyM(team.summary?.teamValue)}
+          value={<CountUp value={team.summary?.teamValue} format={formatMoneyM} />}
           hint={
             team.summary?.teamValueDelta24h != null ? (
               <>
@@ -293,11 +294,11 @@ export default function Team() {
           }
           accent="bull"
         />
-        <StatTile icon={Wallet} label="Saldo" value={formatMoneyM(team.summary?.cash)} hint="Disponible per operar" />
+        <StatTile icon={Wallet} label="Saldo" value={<CountUp value={team.summary?.cash} format={formatMoneyM} />} hint="Disponible per operar" />
         <StatTile
           icon={Link2}
           label="Capital disponible"
-          value={formatMoneyM(team.summary?.availableCapital)}
+          value={<CountUp value={team.summary?.availableCapital} format={formatMoneyM} />}
           hint={`Després de la reserva mínima (${formatMoneyM(team.summary?.minimumCashReserve)})`}
           accent="info"
         />

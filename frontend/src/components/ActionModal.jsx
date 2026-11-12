@@ -54,12 +54,12 @@ export default function ActionModal({ request, onClose }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/55 p-4 backdrop-blur-sm sm:items-center"
+      className="fixed inset-0 z-50 flex animate-fade items-end justify-center bg-black/55 p-4 backdrop-blur-sm sm:items-center"
       onClick={result ? handleClose : undefined}
       role="dialog"
       aria-modal="true"
     >
-      <div className="panel elevated w-full max-w-md rounded-3xl p-6" onClick={(e) => e.stopPropagation()}>
+      <div className="panel elevated w-full max-w-md animate-sheet rounded-3xl p-6" onClick={(e) => e.stopPropagation()}>
         {!result ? (
           <>
             <h3 className="text-lg font-bold">{request.title}</h3>
@@ -84,7 +84,7 @@ export default function ActionModal({ request, onClose }) {
             </div>
           </>
         ) : (
-          <>
+          <div key="result" className="animate-pop">
             <h3 className={`text-lg font-bold ${result.success ? 'text-bull' : 'text-bear'}`}>
               {result.success ? '✓ Fet' : "No s'ha pogut completar"}
             </h3>
@@ -96,7 +96,7 @@ export default function ActionModal({ request, onClose }) {
             >
               Tancar
             </button>
-          </>
+          </div>
         )}
       </div>
     </div>

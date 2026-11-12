@@ -300,7 +300,7 @@ export default function Dashboard() {
             <div className="mt-8">
               <h2 className="text-xl font-bold">Prioritat màxima</h2>
               <p className="text-sm text-muted-foreground">Accions que realment s'han de fer avui.</p>
-              <div className="mt-4 grid grid-cols-1 gap-5 lg:grid-cols-3">{urgent.map(renderCard)}</div>
+              <div className="stagger mt-4 grid grid-cols-1 gap-5 lg:grid-cols-3">{urgent.map(renderCard)}</div>
             </div>
           )}
 
@@ -308,7 +308,7 @@ export default function Dashboard() {
             <div className="mt-8">
               <h2 className="text-xl font-bold">Oportunitats</h2>
               <p className="text-sm text-muted-foreground">Operacions interessants però no necessàriament urgents.</p>
-              <div className="mt-4 grid grid-cols-1 gap-5 lg:grid-cols-3">{opportunity.map(renderCard)}</div>
+              <div className="stagger mt-4 grid grid-cols-1 gap-5 lg:grid-cols-3">{opportunity.map(renderCard)}</div>
             </div>
           )}
         </>
@@ -328,7 +328,7 @@ export default function Dashboard() {
       {actions.planned.length > 0 && (
         <div className="mt-10">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Planificat ({actions.planned.length})</h2>
-          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="stagger mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {actions.planned.map((action, i) => (
               <PlannedRow key={`${action.type}-${action.player?.id}-${i}`} action={action} />
             ))}
@@ -339,7 +339,7 @@ export default function Dashboard() {
       {actions.watch.length > 0 && (
         <div className="mt-10">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Seguiment ({actions.watch.length})</h2>
-          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="stagger mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {actions.watch.map((action, i) => (
               <WatchRow key={`${action.type}-${action.player?.id}-${i}`} action={action} />
             ))}

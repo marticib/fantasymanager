@@ -203,7 +203,7 @@ function MarketRow({ row, onBid, onCancelBid }) {
         </td>
       </tr>
       {open && b && (
-        <tr className="border-b border-border bg-background/40 last:border-0">
+        <tr className="animate-enter border-b border-border bg-background/40 last:border-0">
           <td colSpan={12} className="px-4 py-4">
             <BuyAnalysisDetail row={row} b={b} onBid={onBid} onCancelBid={onCancelBid} />
           </td>
@@ -354,7 +354,7 @@ function MarketCard({ row, onBid, onCancelBid }) {
       </div>
 
       {open && b && (
-        <div className="mt-3 border-t border-border pt-3">
+        <div className="mt-3 animate-enter border-t border-border pt-3">
           <BuyAnalysisDetail row={row} b={b} onBid={onBid} onCancelBid={onCancelBid} />
         </div>
       )}
@@ -732,7 +732,7 @@ export default function Market() {
               <th className="px-4 py-3 text-right">Acció</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="stagger">
             {sorted.map((row) => (
               <MarketRow key={row.id} row={row} onBid={askBid} onCancelBid={askCancelBid} />
             ))}
@@ -750,7 +750,7 @@ export default function Market() {
         )}
       </div>
 
-      <div className="mt-4 space-y-3 md:hidden">
+      <div className="stagger mt-4 space-y-3 md:hidden">
         {sorted.map((row) => (
           <MarketCard key={row.id} row={row} onBid={askBid} onCancelBid={askCancelBid} />
         ))}

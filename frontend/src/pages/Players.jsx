@@ -219,7 +219,7 @@ export default function Players() {
               </th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="stagger">
             {sorted.map((p) => {
               const type = classifyType(p)
               const change24h = p.trend?.change24h
@@ -275,7 +275,7 @@ export default function Players() {
         {!players && <BlockSkeleton rows={6} />}
       </div>
 
-      <div className="mt-4 space-y-3 md:hidden">
+      <div className="stagger mt-4 space-y-3 md:hidden">
         {sorted.map((p) => (
           <PlayerCard key={p.id} p={p} />
         ))}

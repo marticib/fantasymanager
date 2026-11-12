@@ -164,7 +164,7 @@ function LeagueSwitcher({ leagueName }) {
         <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
       </button>
       {open && (
-        <div className="panel elevated absolute left-0 top-full z-30 mt-2 w-64 p-1.5">
+        <div className="panel elevated absolute left-0 top-full z-30 mt-2 w-64 origin-top-left animate-pop p-1.5">
           {!leagues && <p className="px-2 py-2 text-xs text-muted-foreground">Carregant lligues…</p>}
           {leagues?.map((league) => (
             <button
@@ -259,7 +259,7 @@ function NotificationBell({ unread, onChanged }) {
         <CountBadge count={unread} className="absolute -right-1.5 -top-1.5" />
       </button>
       {open && (
-        <div className="panel elevated fixed inset-x-3 top-16 z-40 flex max-h-[70vh] flex-col sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-96">
+        <div className="panel elevated fixed inset-x-3 top-16 z-40 flex max-h-[70vh] origin-top-right animate-pop flex-col sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-96">
           <div className="flex items-center justify-between border-b border-border px-4 py-3">
             <p className="text-sm font-semibold">Avisos</p>
             {alerts?.some((a) => !a.read) && (
@@ -322,7 +322,7 @@ function UserMenu({ user, onLogout }) {
         {initials(user?.name)}
       </button>
       {open && (
-        <div className="panel elevated absolute right-0 top-full z-30 mt-2 w-56 p-1">
+        <div className="panel elevated absolute right-0 top-full z-30 mt-2 w-56 origin-top-right animate-pop p-1">
           <p className="truncate px-3 py-2 text-xs text-muted-foreground">{user?.email}</p>
           <Link to="/settings" className="flex min-h-10 items-center gap-2 rounded-md px-3 text-sm hover:bg-surface-raised">
             <SettingsIcon className="h-4 w-4" /> Configuració
@@ -403,7 +403,7 @@ function MobileBottomNav({ badges }) {
       ))}
       <div className="relative flex flex-1" ref={ref}>
         {open && (
-          <div className="panel elevated absolute bottom-full right-0 z-30 mb-3 w-64 p-1.5">
+          <div className="panel elevated absolute bottom-full right-0 z-30 mb-3 w-64 origin-bottom-right animate-pop p-1.5">
             {moreItems.map((item) => (
               <NavLink key={item.to} to={item.to} className={moreLinkClass}>
                 <item.icon className="h-5 w-5 shrink-0" />
@@ -459,7 +459,7 @@ function Toast({ toast, onClose }) {
 
   if (!toast) return null
   return (
-    <div className="fixed inset-x-3 bottom-24 z-50 flex justify-center md:bottom-6" role="status">
+    <div className="fixed inset-x-3 bottom-24 z-50 flex animate-toast justify-center md:bottom-6" role="status">
       <div
         className={`panel elevated flex max-w-md items-center gap-3 px-4 py-3 text-sm ${toast.tone === 'error' ? 'border-bear/40 text-bear' : 'border-bull/40 text-bull'}`}
       >
@@ -508,6 +508,7 @@ async function notifyNewAlerts(navigate) {
 export default function Layout() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const [header, setHeader] = useState(null)
   const [syncRequested, setSyncRequested] = useState(false)
   const [sessionExpired, setSessionExpired] = useState(false)
@@ -605,13 +606,20 @@ export default function Layout() {
             </div>
           </header>
           <TopNav badges={header?.badges} />
+          {/* Indeterminate progress line while a sync runs. */}
+          <div className={`h-0.5 overflow-hidden transition-opacity duration-300 ${syncing ? 'opacity-100' : 'opacity-0'}`} aria-hidden="true">
+            {syncing && <div className="h-full w-1/3 animate-indeterminate rounded-full bg-gradient-to-r from-transparent via-primary to-transparent" />}
+          </div>
         </div>
 
         {sessionExpired && <SessionExpiredBanner />}
 
         <main className="mx-auto w-full max-w-[1440px] flex-1 px-4 py-6 pb-32 sm:px-6 md:pb-12 lg:px-10 lg:py-8">
           <Suspense fallback={<PageSkeleton />}>
-            <Outlet context={{ header, refreshHeader: loadHeader }} />
+            {/* Re-keyed per page so each navigation fades the new page in. */}
+            <div key={location.pathname} className="animate-page">
+              <Outlet context={{ header, refreshHeader: loadHeader }} />
+            </div>
           </Suspense>
         </main>
       </div>

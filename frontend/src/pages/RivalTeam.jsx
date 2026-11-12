@@ -288,7 +288,7 @@ export default function RivalTeam() {
               </th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="stagger">
             {team.players.map((p) => (
               <PlayerRow key={p.id} p={p} />
             ))}

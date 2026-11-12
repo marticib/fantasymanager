@@ -439,7 +439,7 @@ export default function Clauses() {
               </th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="stagger">
             {sorted.map((row) => (
               <tr
                 key={row.playerId + '-' + row.ownerTeamId}
@@ -558,7 +558,7 @@ export default function Clauses() {
         )}
       </div>
 
-      <div className="mt-4 space-y-3 md:hidden">
+      <div className="stagger mt-4 space-y-3 md:hidden">
         {sorted.map((row) => (
           <ClauseCard key={row.playerId + '-' + row.ownerTeamId} row={row} />
         ))}

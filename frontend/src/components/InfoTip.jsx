@@ -77,7 +77,7 @@ export default function InfoTip({ children, label = 'Què vol dir?', className =
             ref={popRef}
             role="tooltip"
             style={{ position: 'fixed', ...pos }}
-            className="panel elevated z-[60] p-3 text-left text-xs font-normal normal-case leading-relaxed tracking-normal text-foreground shadow-lg"
+            className="panel elevated z-[60] animate-pop p-3 text-left text-xs font-normal normal-case leading-relaxed tracking-normal text-foreground shadow-lg"
           >
             {children}
           </div>,

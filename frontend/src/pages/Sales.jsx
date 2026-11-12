@@ -251,7 +251,7 @@ export default function Sales() {
       </div>
 
       {rows.length > 0 && (
-        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div className="stagger mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
           <div className="panel p-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">En venda</p>
             <p className="num mt-1 text-xl font-bold">{summary.count}</p>
@@ -333,7 +333,7 @@ export default function Sales() {
               <th className="px-4 py-3">Caducitat</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="stagger">
             {rows.map((row) => (
               <tr key={row.id} className="border-b border-border last:border-0 hover:bg-surface-raised">
                 <td className="px-4 py-3">
@@ -379,7 +379,7 @@ export default function Sales() {
         )}
       </div>
 
-      <div className="mt-4 space-y-3 md:hidden">
+      <div className="stagger mt-4 space-y-3 md:hidden">
         {rows.map((row) => (
           <SaleCard key={row.id} row={row} onAccept={handleAccept} onReject={handleReject} />
         ))}
