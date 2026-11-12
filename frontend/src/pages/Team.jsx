@@ -2,9 +2,10 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { cachedGet } from '../api/cachedGet'
 import ChangeBadge from '../components/ChangeBadge'
+import DailyGains from '../components/DailyGains'
 import Sparkline from '../components/Sparkline'
 import { TrendingUp, Wallet, Link2, ChevronDown } from 'lucide-react'
-import { formatMoneyM, formatPercent, formatDelta, formatFullDate, POSITION_LABELS, initials } from '../utils/format'
+import { formatMoneyM, formatPercent, formatDelta, POSITION_LABELS, initials } from '../utils/format'
 import { PageSkeleton, ErrorState } from '../components/PageState'
 import { DATA_CHANGED, useAppEvent } from '../lib/appEvents'
 import InfoTip from '../components/InfoTip'
@@ -257,13 +258,11 @@ export default function Team() {
   const [team, setTeam] = useState(null)
   const [analysis, setAnalysis] = useState(null)
   const [error, setError] = useState('')
-  const [dailyHistory, setDailyHistory] = useState(null)
 
   const load = () => {
     setError('')
     cachedGet('/team', null, setTeam).catch((err) => setError(err.response?.data?.message || "No s'ha pogut carregar la plantilla."))
     cachedGet('/team/analysis', null, setAnalysis).catch(() => {})
-    cachedGet('/history/team-value', { range: '7d' }, (d) => setDailyHistory(d.data)).catch(() => {})
   }
 
   useEffect(load, [])
@@ -373,28 +372,12 @@ export default function Team() {
         ))}
       </div>
 
-      {dailyHistory && dailyHistory.length > 0 && (
-        <div className="mt-6 panel p-5">
-          <div className="flex items-center justify-between">
-            <h2 className="font-semibold">Històric diari</h2>
-            <Link to="/history" className="text-xs text-primary hover:underline">
-              Veure historial complet →
-            </Link>
-          </div>
-          <p className="mt-1 text-xs text-muted-foreground">Variació del valor de la plantilla (només jugadors) dia a dia.</p>
-          <div className="mt-3 divide-y divide-border">
-            {[...dailyHistory].reverse().map((row) => (
-              <div key={row.day} className="flex items-center justify-between gap-3 py-2.5 text-sm">
-                <span className="capitalize text-muted-foreground">{formatFullDate(new Date(row.day))}</span>
-                <div className="flex items-center gap-3">
-                  <span className="num font-medium">{formatMoneyM(row.players_value)}</span>
-                  <ChangeBadge change={row.team_value_change} changePct={row.team_value_change_pct} />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      <DailyGains daily={team.daily} subject="la teva plantilla" />
+      <p className="mt-2 text-right text-xs">
+        <Link to="/history" className="text-primary hover:underline">
+          Veure historial complet →
+        </Link>
+      </p>
     </div>
   )
 }

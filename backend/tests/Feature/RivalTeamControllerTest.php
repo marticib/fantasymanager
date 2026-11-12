@@ -204,6 +204,23 @@ class RivalTeamControllerTest extends TestCase
         Carbon::setTestNow();
     }
 
+    /** 11. My own team page carries the same day-by-day gains block. */
+    public function test_11_my_team_shows_the_same_daily_gains(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-11-12 12:00:00'));
+        ['user' => $user, 'myTeam' => $myTeam] = $this->setupFixture();
+        $p = $this->player('Mine', 'MF', 6_300_000);
+        FantasyTeamPlayer::create(['fantasy_team_id' => $myTeam->id, 'fantasy_player_id' => $p->id]);
+        $this->snapshot($p, 6_000_000, Carbon::parse('2026-11-11 08:00'), $myTeam->id);
+        $this->snapshot($p, 6_300_000, Carbon::parse('2026-11-12 08:00'), $myTeam->id);
+
+        $daily = collect($this->actingAs($user, 'sanctum')->getJson('/api/team')->assertOk()->json('daily'))->keyBy('day');
+
+        $this->assertSame(300_000, $daily['2026-11-12']['change']);
+        $this->assertSame(6_300_000, $daily['2026-11-12']['value']);
+        Carbon::setTestNow();
+    }
+
     /** 9. The economic table: official squad value for every team, cash only for mine, 24h move per squad. */
     public function test_9_standings_carry_the_economic_figures_and_never_guess_a_rivals_cash(): void
     {

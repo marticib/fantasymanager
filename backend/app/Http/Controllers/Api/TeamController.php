@@ -30,6 +30,7 @@ class TeamController extends Controller
         FantasySettingsService $settings,
         PlayerDecisionEngine $decisionEngine,
         TeamValueDeltaService $teamValueDelta,
+        RosterValueHistoryService $rosterHistory,
     ) {
         $account = $this->currentAccount($request);
         $team = $account->activeTeam;
@@ -92,6 +93,8 @@ class TeamController extends Controller
                 'minimumCashReserve' => (int) $rules['minimum_cash_reserve'],
             ],
             'players' => $players,
+            // Same "daily gains" block as a rival's page (see rival()).
+            'daily' => $rosterHistory->daily($team->players()->get(), 7),
         ]);
     }
 

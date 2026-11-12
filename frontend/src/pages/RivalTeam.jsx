@@ -3,9 +3,10 @@ import { Link, useParams } from 'react-router-dom'
 import apiClient from '../api/client'
 import Sparkline from '../components/Sparkline'
 import { TrendingUpIcon, WalletIcon, ChevronDownIcon } from '../components/Icons'
-import { formatDelta, formatFullDate, formatMoneyM, formatPercent, POSITION_LABELS, initials, ACTION_LABELS } from '../utils/format'
+import { formatDelta, formatMoneyM, formatPercent, POSITION_LABELS, initials, ACTION_LABELS } from '../utils/format'
 import ChangeBadge from '../components/ChangeBadge'
 import CountUp from '../components/CountUp'
+import DailyGains from '../components/DailyGains'
 import { PageSkeleton, ErrorState } from '../components/PageState'
 import InfoTip from '../components/InfoTip'
 
@@ -346,25 +347,7 @@ export default function RivalTeam() {
         ))}
       </div>
 
-      {team.daily?.some((d) => d.change !== null) && (
-        <div className="mt-6 panel p-5">
-          <h2 className="font-semibold">Guany diari</h2>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Quant ha guanyat o perdut cada dia la seva plantilla actual pel canvi de valor dels jugadors (els fitxatges i vendes no compten).
-          </p>
-          <div className="stagger mt-3 divide-y divide-border">
-            {[...team.daily].reverse().map((row) => (
-              <div key={row.day} className="flex items-center justify-between gap-3 py-2.5 text-sm">
-                <span className="capitalize text-muted-foreground">{formatFullDate(new Date(`${row.day}T12:00:00`))}</span>
-                <div className="flex items-center gap-3">
-                  <span className="num font-medium">{formatMoneyM(row.value)}</span>
-                  <ChangeBadge change={row.change} changePct={row.changePct} />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      <DailyGains daily={team.daily} />
     </div>
   )
 }
