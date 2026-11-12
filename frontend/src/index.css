@@ -73,9 +73,14 @@
    lifts, etc.) apply normally. */
 @theme {
   --ease-out-soft: cubic-bezier(0.2, 0.8, 0.2, 1);
-  --animate-enter: enter 0.42s var(--ease-out-soft) backwards;
-  --animate-page: enter 0.32s var(--ease-out-soft) backwards;
+  --animate-enter: enter 0.36s var(--ease-out-soft) backwards;
+  /* Route change: opacity only — the content's own entrance does the moving. */
+  --animate-page: fade 0.16s ease-out backwards;
   --animate-fade: fade 0.2s ease-out backwards;
+  /* Skeletons only fade in if loading takes a moment, so cached pages don't flash one. */
+  --animate-skeleton-in: fade 0.25s ease-out 0.15s backwards;
+  /* Late-arriving banners open up instead of shoving the page down in one jump. */
+  --animate-expand: expand 0.36s var(--ease-out-soft) backwards;
   --animate-pop: pop 0.18s var(--ease-out-soft) backwards;
   --animate-sheet: sheet 0.28s var(--ease-out-soft) backwards;
   --animate-toast: toast 0.32s var(--ease-out-soft) backwards;
@@ -90,6 +95,12 @@
   }
   @keyframes fade {
     from {
+      opacity: 0;
+    }
+  }
+  @keyframes expand {
+    from {
+      grid-template-rows: 0fr;
       opacity: 0;
     }
   }
@@ -129,22 +140,33 @@
   }
 }
 
-/* Children enter one after another (first 12 staggered, the rest together). */
+/* Children enter one after another: short steps, capped so a long list never
+   keeps the user waiting (items past the 8th all enter together). */
 @utility stagger {
   & > * {
     animation: var(--animate-enter);
   }
-  & > *:nth-child(2) { animation-delay: 40ms; }
-  & > *:nth-child(3) { animation-delay: 80ms; }
-  & > *:nth-child(4) { animation-delay: 120ms; }
-  & > *:nth-child(5) { animation-delay: 160ms; }
-  & > *:nth-child(6) { animation-delay: 200ms; }
-  & > *:nth-child(7) { animation-delay: 240ms; }
-  & > *:nth-child(8) { animation-delay: 280ms; }
-  & > *:nth-child(9) { animation-delay: 320ms; }
-  & > *:nth-child(10) { animation-delay: 360ms; }
-  & > *:nth-child(11) { animation-delay: 400ms; }
-  & > *:nth-child(n + 12) { animation-delay: 440ms; }
+  & > *:nth-child(2) { animation-delay: 30ms; }
+  & > *:nth-child(3) { animation-delay: 60ms; }
+  & > *:nth-child(4) { animation-delay: 90ms; }
+  & > *:nth-child(5) { animation-delay: 120ms; }
+  & > *:nth-child(6) { animation-delay: 150ms; }
+  & > *:nth-child(7) { animation-delay: 180ms; }
+  & > *:nth-child(n + 8) { animation-delay: 210ms; }
+}
+
+/* Same cascade for table rows, opacity only: moving <tr>s is unreliable (Safari). */
+@utility stagger-rows {
+  & > tr {
+    animation: var(--animate-fade);
+    animation-duration: 0.28s;
+  }
+  & > tr:nth-child(2) { animation-delay: 25ms; }
+  & > tr:nth-child(3) { animation-delay: 50ms; }
+  & > tr:nth-child(4) { animation-delay: 75ms; }
+  & > tr:nth-child(5) { animation-delay: 100ms; }
+  & > tr:nth-child(6) { animation-delay: 125ms; }
+  & > tr:nth-child(n + 7) { animation-delay: 150ms; }
 }
 
 /* Loading placeholder with a moving sheen instead of a flat pulse. */

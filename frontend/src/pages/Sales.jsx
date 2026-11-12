@@ -333,7 +333,7 @@ export default function Sales() {
               <th className="px-4 py-3">Caducitat</th>
             </tr>
           </thead>
-          <tbody className="stagger">
+          <tbody className="stagger-rows">
             {rows.map((row) => (
               <tr key={row.id} className="border-b border-border last:border-0 hover:bg-surface-raised">
                 <td className="px-4 py-3">

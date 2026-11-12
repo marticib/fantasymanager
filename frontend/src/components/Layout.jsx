@@ -5,6 +5,7 @@ import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { formatRelativeTime, initials } from '../utils/format'
 import { LogoIcon } from './Icons'
 import { PageSkeleton } from './PageState'
+import Reveal from './Reveal'
 import { ACTION_DONE, DATA_CHANGED, REQUEST_SYNC, SESSION_EXPIRED, emitAppEvent, useAppEvent } from '../lib/appEvents'
 import { readStored, writeStored } from '../lib/storage'
 import { LAST_VISIT_KEY, PREV_VISIT_KEY, SEVERITY_DOT } from '../lib/alerts'
@@ -612,7 +613,11 @@ export default function Layout() {
           </div>
         </div>
 
-        {sessionExpired && <SessionExpiredBanner />}
+        {sessionExpired && (
+          <Reveal>
+            <SessionExpiredBanner />
+          </Reveal>
+        )}
 
         <main className="mx-auto w-full max-w-[1440px] flex-1 px-4 py-6 pb-32 sm:px-6 md:pb-12 lg:px-10 lg:py-8">
           <Suspense fallback={<PageSkeleton />}>

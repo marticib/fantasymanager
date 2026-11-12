@@ -10,6 +10,7 @@ import { DATA_CHANGED, REQUEST_SYNC, emitAppEvent, useAppEvent } from '../lib/ap
 import { readStored, writeStored } from '../lib/storage'
 import { PREV_VISIT_KEY, alertCountLabel } from '../lib/alerts'
 import { formatDelta, formatFullDate, formatMoneyM, formatRelativeTime, greeting, initials } from '../utils/format'
+import Reveal from '../components/Reveal'
 
 const STALE_AFTER_MINUTES = 90
 const DISMISSED_KEY = 'fantasy:today-dismissed'
@@ -108,40 +109,42 @@ function SinceLastVisit() {
   }
 
   return (
-    <div className="mt-5 rounded-xl border border-primary/30 bg-primary/5 px-5 py-4">
-      <div className="flex items-start justify-between gap-3">
-        <p className="text-sm font-semibold">Des de la teva última visita ({formatRelativeTime(since)})</p>
-        <button onClick={close} className="min-h-9 shrink-0 rounded-md px-2 text-xs font-semibold text-muted-foreground hover:text-foreground">
-          Entesos
-        </button>
-      </div>
-      <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
-        {delta ? (
-          <li>
-            El valor del teu equip ha {delta > 0 ? 'pujat' : 'baixat'}{' '}
-            <span className={`num font-semibold ${delta > 0 ? 'text-bull' : 'text-bear'}`}>{formatDelta(delta)}</span>.
-          </li>
-        ) : null}
-        {counts.map(([type, count]) => (
-          <li key={type}>{alertCountLabel(type, count)}.</li>
-        ))}
-      </ul>
-      {data.latest?.length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {data.latest.map((a, i) =>
-            a.link ? (
-              <Link key={i} to={a.link} className="rounded-lg bg-surface px-3 py-1.5 text-xs font-semibold hover:text-primary">
-                {a.title} →
-              </Link>
-            ) : (
-              <span key={i} className="rounded-lg bg-surface px-3 py-1.5 text-xs">
-                {a.title}
-              </span>
-            ),
-          )}
+    <Reveal>
+      <div className="mt-5 rounded-xl border border-primary/30 bg-primary/5 px-5 py-4">
+        <div className="flex items-start justify-between gap-3">
+          <p className="text-sm font-semibold">Des de la teva última visita ({formatRelativeTime(since)})</p>
+          <button onClick={close} className="min-h-9 shrink-0 rounded-md px-2 text-xs font-semibold text-muted-foreground hover:text-foreground">
+            Entesos
+          </button>
         </div>
-      )}
-    </div>
+        <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
+          {delta ? (
+            <li>
+              El valor del teu equip ha {delta > 0 ? 'pujat' : 'baixat'}{' '}
+              <span className={`num font-semibold ${delta > 0 ? 'text-bull' : 'text-bear'}`}>{formatDelta(delta)}</span>.
+            </li>
+          ) : null}
+          {counts.map(([type, count]) => (
+            <li key={type}>{alertCountLabel(type, count)}.</li>
+          ))}
+        </ul>
+        {data.latest?.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {data.latest.map((a, i) =>
+              a.link ? (
+                <Link key={i} to={a.link} className="rounded-lg bg-surface px-3 py-1.5 text-xs font-semibold hover:text-primary">
+                  {a.title} →
+                </Link>
+              ) : (
+                <span key={i} className="rounded-lg bg-surface px-3 py-1.5 text-xs">
+                  {a.title}
+                </span>
+              ),
+            )}
+          </div>
+        )}
+      </div>
+    </Reveal>
   )
 }
 
@@ -237,29 +240,31 @@ export default function Dashboard() {
       <SinceLastVisit />
 
       {ordersNeedingConfirmation.length > 0 && (
-        <div className="mt-5 rounded-xl border border-info/30 bg-info/10 px-5 py-4">
-          <div className="flex items-start gap-3">
-            <WarningIcon className="mt-0.5 h-5 w-5 shrink-0 text-info" />
-            <p className="text-sm font-semibold text-info">
-              {ordersNeedingConfirmation.length === 1
-                ? '1 ordre de compra automàtica espera confirmació'
-                : `${ordersNeedingConfirmation.length} ordres de compra automàtica esperen confirmació`}{' '}
-              — la clàusula ha pujat des que es va programar.
-            </p>
+        <Reveal>
+          <div className="mt-5 rounded-xl border border-info/30 bg-info/10 px-5 py-4">
+            <div className="flex items-start gap-3">
+              <WarningIcon className="mt-0.5 h-5 w-5 shrink-0 text-info" />
+              <p className="text-sm font-semibold text-info">
+                {ordersNeedingConfirmation.length === 1
+                  ? '1 ordre de compra automàtica espera confirmació'
+                  : `${ordersNeedingConfirmation.length} ordres de compra automàtica esperen confirmació`}{' '}
+                — la clàusula ha pujat des que es va programar.
+              </p>
+            </div>
+            <div className="mt-3 space-y-1.5">
+              {ordersNeedingConfirmation.map((order) => (
+                <Link
+                  key={order.id}
+                  to={`/players/${order.player.id}`}
+                  className="flex min-h-11 items-center justify-between rounded-lg bg-surface px-3 py-2 text-sm hover:bg-surface-raised"
+                >
+                  <span className="font-semibold">{order.player.name}</span>
+                  <span className="text-muted-foreground">{formatMoneyM(order.pendingConfirmationClauseValue)}</span>
+                </Link>
+              ))}
+            </div>
           </div>
-          <div className="mt-3 space-y-1.5">
-            {ordersNeedingConfirmation.map((order) => (
-              <Link
-                key={order.id}
-                to={`/players/${order.player.id}`}
-                className="flex min-h-11 items-center justify-between rounded-lg bg-surface px-3 py-2 text-sm hover:bg-surface-raised"
-              >
-                <span className="font-semibold">{order.player.name}</span>
-                <span className="text-muted-foreground">{formatMoneyM(order.pendingConfirmationClauseValue)}</span>
-              </Link>
-            ))}
-          </div>
-        </div>
+        </Reveal>
       )}
 
       {isStale && (

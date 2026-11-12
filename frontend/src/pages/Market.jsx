@@ -203,7 +203,7 @@ function MarketRow({ row, onBid, onCancelBid }) {
         </td>
       </tr>
       {open && b && (
-        <tr className="animate-enter border-b border-border bg-background/40 last:border-0">
+        <tr className="animate-fade border-b border-border bg-background/40 last:border-0">
           <td colSpan={12} className="px-4 py-4">
             <BuyAnalysisDetail row={row} b={b} onBid={onBid} onCancelBid={onCancelBid} />
           </td>
@@ -732,7 +732,7 @@ export default function Market() {
               <th className="px-4 py-3 text-right">Acció</th>
             </tr>
           </thead>
-          <tbody className="stagger">
+          <tbody className="stagger-rows">
             {sorted.map((row) => (
               <MarketRow key={row.id} row={row} onBid={askBid} onCancelBid={askCancelBid} />
             ))}

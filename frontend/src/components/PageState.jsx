@@ -1,17 +1,17 @@
 /** Shimmering placeholder shaped like a page (title, stat cards, rows) while data loads. */
 export function PageSkeleton({ cards = 3, rows = 6 }) {
   return (
-    <div aria-busy="true" aria-label="Carregant">
+    <div className="animate-skeleton-in" aria-busy="true" aria-label="Carregant">
       <div className="skeleton h-8 w-48 rounded-lg" />
       <div className="skeleton mt-2 h-4 w-72 max-w-full rounded opacity-70" />
       {cards > 0 && (
-        <div className="stagger mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
           {Array.from({ length: cards }, (_, i) => (
             <div key={i} className="panel h-24" />
           ))}
         </div>
       )}
-      <div className="stagger mt-6 space-y-2">
+      <div className="mt-6 space-y-2">
         {Array.from({ length: rows }, (_, i) => (
           <div key={i} className="panel flex h-16 items-center gap-3 px-4">
             <div className="skeleton h-8 w-8 shrink-0 rounded-full" />
@@ -27,7 +27,7 @@ export function PageSkeleton({ cards = 3, rows = 6 }) {
 /** Inline placeholder for a block inside a page (a list or chart still loading). */
 export function BlockSkeleton({ rows = 3 }) {
   return (
-    <div className="space-y-2 p-4" aria-busy="true" aria-label="Carregant">
+    <div className="animate-skeleton-in space-y-2 p-4" aria-busy="true" aria-label="Carregant">
       {Array.from({ length: rows }, (_, i) => (
         <div key={i} className="skeleton h-4 rounded" style={{ width: `${90 - i * 15}%` }} />
       ))}

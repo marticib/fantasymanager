@@ -219,7 +219,7 @@ export default function Players() {
               </th>
             </tr>
           </thead>
-          <tbody className="stagger">
+          <tbody className="stagger-rows">
             {sorted.map((p) => {
               const type = classifyType(p)
               const change24h = p.trend?.change24h

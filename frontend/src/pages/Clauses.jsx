@@ -439,7 +439,7 @@ export default function Clauses() {
               </th>
             </tr>
           </thead>
-          <tbody className="stagger">
+          <tbody className="stagger-rows">
             {sorted.map((row) => (
               <tr
                 key={row.playerId + '-' + row.ownerTeamId}
