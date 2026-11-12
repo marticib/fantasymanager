@@ -13,6 +13,8 @@ class FantasyAccount extends Model
     use HasFactory;
 
     protected $fillable = [
+        'telegram_chat_id',
+        'telegram_link_code',
         'user_id',
         'fantasy_user_id',
         'nickname',

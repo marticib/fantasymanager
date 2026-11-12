@@ -28,6 +28,7 @@ import {
   Bell,
   AlertTriangle,
   X,
+  Activity,
 } from 'lucide-react'
 
 const NAV_ITEMS = [
@@ -40,6 +41,7 @@ const NAV_ITEMS = [
   { to: '/trading', label: 'Trading', icon: TrendingUp },
   { to: '/players', label: 'Jugadors', icon: Target },
   { to: '/standings', label: 'Classificació', icon: Trophy },
+  { to: '/activity', label: 'Activitat', icon: Activity },
   { to: '/history', label: 'Històric', icon: BarChart3 },
 ]
 const SETTINGS_ITEM = { to: '/settings', label: 'Configuració', icon: SettingsIcon }
@@ -210,7 +212,6 @@ function NotificationBell({ unread, onChanged }) {
   const { open, setOpen, ref } = usePopover()
   const [alerts, setAlerts] = useState(null)
   const navigate = useNavigate()
-  const [permission, setPermission] = useState(() => (typeof Notification === 'undefined' ? 'unsupported' : Notification.permission))
 
   const load = () =>
     apiClient
@@ -240,13 +241,6 @@ function NotificationBell({ unread, onChanged }) {
     onChanged()
   }
 
-  const askPermission = async () => {
-    try {
-      setPermission(await Notification.requestPermission())
-    } catch {
-      // ignore
-    }
-  }
 
   return (
     <div className="relative shrink-0" ref={ref}>
@@ -291,18 +285,15 @@ function NotificationBell({ unread, onChanged }) {
               </button>
             ))}
           </div>
-          {permission === 'default' && (
-            <div className="border-t border-border px-4 py-3">
-              <button onClick={askPermission} className="min-h-10 w-full rounded-lg bg-primary/15 text-sm font-semibold text-primary hover:bg-primary/25">
-                Rebre aquests avisos també al navegador
-              </button>
-            </div>
-          )}
-          {permission === 'denied' && (
-            <p className="border-t border-border px-4 py-3 text-xs text-muted-foreground">
-              Els avisos del navegador estan bloquejats. Pots activar-los als permisos del lloc web.
-            </p>
-          )}
+          <div className="border-t border-border px-4 py-3">
+            <Link
+              to="/settings#notificacions"
+              onClick={() => setOpen(false)}
+              className="flex min-h-10 w-full items-center justify-center rounded-lg bg-primary/15 text-sm font-semibold text-primary hover:bg-primary/25"
+            >
+              Rebre els avisos al mòbil o a Telegram
+            </Link>
+          </div>
         </div>
       )}
     </div>
@@ -351,11 +342,12 @@ function TopNav({ badges }) {
       className="hidden items-center gap-1 overflow-x-auto px-3 [scrollbar-width:none] sm:px-6 md:flex lg:px-10"
       aria-label="Navegació principal"
     >
-      {[...NAV_ITEMS, SETTINGS_ITEM].map((item) => (
+      {/* Configuració lives in the avatar menu, so the bar fits on a laptop screen. */}
+      {NAV_ITEMS.map((item) => (
         <NavLink key={item.to} to={item.to} end={item.end} className={linkClass}>
           {({ isActive }) => (
             <>
-              <item.icon className={`h-4 w-4 shrink-0 ${isActive ? 'text-primary' : ''}`} />
+              <item.icon className={`hidden h-4 w-4 shrink-0 xl:block ${isActive ? 'text-primary' : ''}`} />
               {item.label}
               <CountBadge count={item.badge && badges?.[item.badge]} help={item.badgeHelp} />
             </>
@@ -486,6 +478,8 @@ async function markExistingAlertsNotified() {
 /** Shows a browser notification for each unread alert newer than the last one notified. */
 async function notifyNewAlerts(navigate) {
   if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return
+  // This device already receives them as real push notifications (see /settings) — don't show them twice.
+  if (readStored(window.localStorage, 'fantasy:push-enabled', false)) return
   try {
     const { data } = await apiClient.get('/alerts')
     const lastNotified = readStored(window.localStorage, NOTIFIED_KEY, null)

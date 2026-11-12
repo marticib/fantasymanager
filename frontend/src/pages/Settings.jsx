@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import apiClient from '../api/client'
+import NotificationSettings from '../components/NotificationSettings'
 import { PageSkeleton } from '../components/PageState'
 
 const RULE_LABELS = {
@@ -119,6 +120,8 @@ export default function Settings() {
           </div>
         )}
       </section>
+
+      <NotificationSettings />
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
         <section className="panel p-6">

@@ -13,6 +13,7 @@ class FantasyTeam extends Model
     use HasFactory;
 
     protected $fillable = [
+        'manager_external_id',
         'fantasy_league_id',
         'external_id',
         'name',

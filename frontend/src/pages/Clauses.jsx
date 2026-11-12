@@ -10,7 +10,9 @@ import { PageSkeleton, EmptyState, ErrorState } from '../components/PageState'
 import { SearchX } from 'lucide-react'
 import { usePersistentState } from '../lib/storage'
 import { DATA_CHANGED, useAppEvent } from '../lib/appEvents'
-import { formatMoneyM, formatDelta, formatPercent, POSITION_LABELS, initials, ACTION_LABELS } from '../utils/format'
+import { formatMoney, formatMoneyM, formatDelta, formatPercent, formatCountdown, POSITION_LABELS, initials, ACTION_LABELS } from '../utils/format'
+import apiClient from '../api/client'
+import ActionModal from '../components/ActionModal'
 
 const POSITIONS = ['GK', 'DF', 'MF', 'FW']
 const DEFAULT_FILTERS = { position: null, onlyRecommended: false, onlyLocked: true }
@@ -165,8 +167,97 @@ function ClauseCard({ row }) {
   )
 }
 
+const RADAR_DAYS = 7
+
+/**
+ * Rival clauses that unlock within the week, soonest first — with a one-tap
+ * automatic purchase order (paid the moment it unlocks, if still worth it).
+ */
+function ClauseRadar({ rows, onSchedule }) {
+  const soon = rows
+    .filter((r) => r.isLocked && !r.isShielded && r.clauseLockedUntil && new Date(r.clauseLockedUntil) - Date.now() < RADAR_DAYS * 864e5)
+    .sort((a, b) => new Date(a.clauseLockedUntil) - new Date(b.clauseLockedUntil))
+
+  if (soon.length === 0) return null
+
+  const unlockLabel = (iso) =>
+    new Intl.DateTimeFormat('ca-ES', { weekday: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(iso))
+
+  return (
+    <section className="panel mt-5 overflow-hidden">
+      <div className="border-b border-border bg-surface-raised/40 px-4 py-3 sm:px-5">
+        <h2 className="flex items-center gap-1.5 font-semibold">
+          Es desbloquegen aviat <span className="text-sm font-normal text-muted-foreground">({soon.length})</span>
+          <InfoTip>
+            Clàusules de rivals que es podran pagar en els propers {RADAR_DAYS} dies. «Programar» crea una compra automàtica: l'app la paga quan es
+            desbloquegi, i si el rival l'ha pujat abans et demana confirmació.
+          </InfoTip>
+        </h2>
+      </div>
+      <div className="stagger divide-y divide-border">
+        {soon.map((r) => {
+          const recommended = r.economicRecommendation === 'PAY_CLAUSE' || r.economicRecommendation === 'CONSIDER'
+          return (
+            <div key={`${r.playerId}-${r.ownerTeamId}`} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 sm:px-5">
+              <Link to={`/players/${r.playerId}`} className="flex min-w-0 flex-1 items-center gap-3 hover:text-primary">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface-raised text-xs font-bold text-muted-foreground">
+                  {r.imageUrl ? <img src={r.imageUrl} alt="" className="h-full w-full object-cover" /> : initials(r.playerName)}
+                </span>
+                <span className="min-w-0">
+                  <span className="block truncate font-semibold">{r.playerName}</span>
+                  <span className="block truncate text-xs text-muted-foreground">
+                    {POSITION_LABELS[r.position] || r.position} · {r.ownerTeamName || '—'}
+                  </span>
+                </span>
+              </Link>
+              <div className="text-right">
+                <p className="num text-sm font-semibold">{formatMoneyM(r.clauseValue)}</p>
+                <p className="text-[11px] text-muted-foreground">clàusula</p>
+              </div>
+              <div className="w-32 text-right">
+                <p className="text-sm font-semibold text-info">d'aquí {formatCountdown(r.clauseLockedUntil) || 'poc'}</p>
+                <p className="text-[11px] capitalize text-muted-foreground">{unlockLabel(r.clauseLockedUntil)}</p>
+              </div>
+              <span className={`rounded-md px-2 py-1 text-xs font-bold ${ACTION_BADGE[r.economicRecommendation]}`}>{ACTION_LABELS[r.economicRecommendation]}</span>
+              <button
+                onClick={() => onSchedule(r)}
+                className={`min-h-9 rounded-lg px-3 text-xs font-semibold ${
+                  recommended ? 'bg-info text-background hover:brightness-110' : 'border border-border text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Programar
+              </button>
+            </div>
+          )
+        })}
+      </div>
+    </section>
+  )
+}
+
 export default function Clauses() {
   const [payload, setPayload] = useState(null)
+  const [pendingAction, setPendingAction] = useState(null)
+  const [ordersKey, setOrdersKey] = useState(0)
+
+  const scheduleOrder = (row) =>
+    setPendingAction({
+      title: `Programar la compra de ${row.playerName}`,
+      description: (
+        <>
+          Quan la clàusula es desbloquegi, l'app la pagarà automàticament per{' '}
+          <span className="num font-semibold text-foreground">{formatMoney(row.clauseValue)}</span>. Si {row.ownerTeamName || 'el rival'} la puja abans,
+          et demanarà confirmació. La pots cancel·lar quan vulguis.
+        </>
+      ),
+      confirmLabel: 'Programar compra',
+      tone: 'neutral',
+      run: async () => {
+        await apiClient.post('/clause-orders', { fantasy_player_id: row.playerId })
+        setOrdersKey((k) => k + 1)
+        return `Compra automàtica de ${row.playerName} programada.`
+      },
+    })
   const [error, setError] = useState('')
 
   const [search, setSearch] = useState('')
@@ -248,7 +339,9 @@ export default function Clauses() {
         <div className="mt-4 panel p-6 text-sm text-muted-foreground">{payload.message}</div>
       )}
 
-      <ClauseOrdersPanel />
+      <ActionModal request={pendingAction} onClose={() => setPendingAction(null)} />
+      <ClauseOrdersPanel key={ordersKey} />
+      <ClauseRadar rows={rows} onSchedule={scheduleOrder} />
 
       {top && (
         <div className="mt-5 flex flex-col gap-6 rounded-2xl border border-info/30 bg-info/5 p-6 lg:flex-row lg:items-center lg:justify-between">

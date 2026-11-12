@@ -35,4 +35,21 @@ return [
         ],
     ],
 
+    // Web Push (installed app / browser notifications even with the app closed).
+    // Generate a key pair once with `php artisan fantasy:webpush-keys`.
+    'webpush' => [
+        'public_key' => env('WEBPUSH_PUBLIC_KEY'),
+        'private_key' => env('WEBPUSH_PRIVATE_KEY'),
+        'subject' => env('WEBPUSH_SUBJECT', env('APP_URL', 'http://localhost')),
+    ],
+
+    // Telegram bot that forwards notifications (create one with @BotFather).
+    'telegram' => [
+        'bot_token' => env('TELEGRAM_BOT_TOKEN'),
+        'bot_username' => env('TELEGRAM_BOT_USERNAME'),
+    ],
+
+    // Where links in push/Telegram notifications point to.
+    'frontend_url' => env('FRONTEND_URL', 'http://localhost:5173'),
+
 ];

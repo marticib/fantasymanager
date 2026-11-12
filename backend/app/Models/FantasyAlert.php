@@ -28,6 +28,18 @@ class FantasyAlert extends Model
 
     public const TYPE_SESSION_EXPIRED = 'SESSION_EXPIRED';
 
+    /** A rival took one of your players (clause or accepted offer). */
+    public const TYPE_PLAYER_STOLEN = 'PLAYER_STOLEN';
+
+    /** One of your players can be taken cheaply: clause close to his value, rivals active. */
+    public const TYPE_CLAUSE_EXPOSED = 'CLAUSE_EXPOSED';
+
+    /** The market closes soon: your bids, pending buys, lineup problems. */
+    public const TYPE_MARKET_CLOSING = 'MARKET_CLOSING';
+
+    /** Sunday recap of the week. */
+    public const TYPE_WEEKLY_SUMMARY = 'WEEKLY_SUMMARY';
+
     public const SEVERITY_INFO = 'INFO';
 
     public const SEVERITY_WARNING = 'WARNING';

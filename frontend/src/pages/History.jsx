@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from 'recharts'
 import apiClient from '../api/client'
 import ChangeBadge from '../components/ChangeBadge'
+import TradeLedger from '../components/TradeLedger'
 import { ChevronDownIcon, CheckIcon } from '../components/Icons'
 import { formatMoney, formatMoneyM, formatDelta, formatPercent, formatFullDate, formatDate, POSITION_LABELS, initials } from '../utils/format'
 import { PageSkeleton, BlockSkeleton } from '../components/PageState'
@@ -303,6 +304,8 @@ export default function History() {
       <p className="mt-1 text-sm text-muted-foreground">
         {rows.length > 0 ? `Temporada actual · ${rows.length} dies registrats` : 'Encara no hi ha dades registrades'}
       </p>
+
+      <TradeLedger />
 
       {rows.length === 0 ? (
         <div className="mt-6 panel p-8 text-center">

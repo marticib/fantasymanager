@@ -21,6 +21,7 @@ const Settings = lazy(() => import('./pages/Settings'))
 const PlayerDetail = lazy(() => import('./pages/PlayerDetail'))
 const Players = lazy(() => import('./pages/Players'))
 const RivalTeam = lazy(() => import('./pages/RivalTeam'))
+const Activity = lazy(() => import('./pages/Activity'))
 
 function RequireAuth({ children }) {
   const { token, loading } = useAuth()
@@ -63,6 +64,7 @@ export default function App() {
             <Route path="/standings" element={<Standings />} />
             <Route path="/standings/:teamId" element={<RivalTeam />} />
             <Route path="/history" element={<History />} />
+            <Route path="/activity" element={<Activity />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/players/:id" element={<PlayerDetail />} />
           </Route>

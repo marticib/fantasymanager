@@ -2,6 +2,7 @@
 
 namespace App\Services\Notifications;
 
+use App\Jobs\DeliverAlertJob;
 use App\Models\FantasyAccount;
 use App\Models\FantasyAlert;
 use Illuminate\Database\QueryException;
@@ -13,7 +14,8 @@ use Throwable;
  * user would otherwise only find by opening the right screen: an offer on one
  * of their listings, an auction they bid on ending, an automatic clause order
  * changing state, the LaLiga session expiring. The frontend polls these
- * (bell + optional browser notifications).
+ * (bell), and each one is also pushed to the user's phone/browser and
+ * Telegram when connected (DeliverAlertJob).
  *
  * Never throws: a notification failing must never break the sync or action
  * that triggered it.
@@ -33,7 +35,7 @@ class AlertService
                 return null;
             }
 
-            return FantasyAlert::create([
+            $alert = FantasyAlert::create([
                 'fantasy_account_id' => $accountId,
                 'type' => $type,
                 'title' => $title,
@@ -44,6 +46,15 @@ class AlertService
                 'severity' => $options['severity'] ?? FantasyAlert::SEVERITY_INFO,
                 'channel' => 'IN_APP',
             ]);
+
+            // Out to the phone/Telegram in the background — never delays or breaks the caller.
+            try {
+                DeliverAlertJob::dispatch($alert->id);
+            } catch (Throwable $e) {
+                Log::warning('fantasy.alerts.dispatch_failed', ['message' => $e->getMessage()]);
+            }
+
+            return $alert;
         } catch (QueryException $e) {
             // Unique (account, dedupe_key) race between two syncs — already notified.
             return null;

@@ -18,6 +18,20 @@ class FantasyTransaction extends Model
 
     public const TYPE_OFFER_ACCEPTED = 'OFFER_ACCEPTED';
 
+    // League activity feed (FantasyActivityDTO), confirmed live against rosters:
+
+    /** Bought from the market when it closed (to_team = buyer). */
+    public const TYPE_MARKET_BUY = 'MARKET_BUY';
+
+    /** Sold to the market (from_team = seller; the player goes back to the free market). */
+    public const TYPE_MARKET_SELL = 'MARKET_SELL';
+
+    /** Manager to manager — a clause payment or an accepted offer (to_team = buyer, from_team = seller). */
+    public const TYPE_TRANSFER = 'TRANSFER';
+
+    /** Money a team earned for its matchday points (to_team). */
+    public const TYPE_MATCHDAY_REWARD = 'MATCHDAY_REWARD';
+
     protected $fillable = [
         'fantasy_account_id',
         'fantasy_league_id',

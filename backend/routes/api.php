@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\ActivityController;
 use App\Http\Controllers\Api\AlertController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ClauseController;
@@ -9,6 +10,7 @@ use App\Http\Controllers\Api\FantasyAccountController;
 use App\Http\Controllers\Api\HistoryController;
 use App\Http\Controllers\Api\LeagueController;
 use App\Http\Controllers\Api\MarketController;
+use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\PlayerController;
 use App\Http\Controllers\Api\RecommendationController;
 use App\Http\Controllers\Api\SettingController;
@@ -71,6 +73,19 @@ Route::middleware(['auth:sanctum', 'bump.data'])->group(function () {
 
     // Trading & clauses (scaffolded now, fleshed out post-MVP)
     Route::get('/trading/plans', [TradingController::class, 'plans']);
+
+    // League activity ("what the rivals did") and your own trading record
+    Route::get('/activity', [ActivityController::class, 'index'])->middleware('cache.api');
+    Route::get('/history/trades', [ActivityController::class, 'trades'])->middleware('cache.api');
+
+    // Notifications outside the app: phone/browser push and Telegram
+    Route::get('/notifications/channels', [NotificationController::class, 'channels']);
+    Route::post('/notifications/push', [NotificationController::class, 'subscribe']);
+    Route::delete('/notifications/push', [NotificationController::class, 'unsubscribe']);
+    Route::post('/notifications/telegram/link', [NotificationController::class, 'telegramLink']);
+    Route::post('/notifications/telegram/verify', [NotificationController::class, 'telegramVerify']);
+    Route::delete('/notifications/telegram', [NotificationController::class, 'telegramDisconnect']);
+    Route::post('/notifications/test', [NotificationController::class, 'test']);
     Route::get('/trading/make-money', [TradingController::class, 'makeMoney']);
     Route::get('/clauses/opportunities', [ClauseController::class, 'opportunities'])->middleware('cache.api');
 

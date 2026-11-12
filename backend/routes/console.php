@@ -77,3 +77,10 @@ Schedule::command('fantasy:evaluate-decisions')
     ->cron(CronFrequency::everyMinutes((int) config('fantasy.sync.decision_evaluation_frequency_minutes')))
     ->withoutOverlapping()
     ->onOneServer();
+
+// Time-based notifications (cheap clauses, market closing within the hour,
+// Sunday recap). Each is deduplicated, so running often never repeats one.
+Schedule::command('fantasy:send-reminders')
+    ->everyTenMinutes()
+    ->withoutOverlapping()
+    ->onOneServer();

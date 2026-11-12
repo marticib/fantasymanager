@@ -13,8 +13,8 @@ use App\Models\FantasyPlayerSnapshot;
 use App\Models\FantasyStanding;
 use App\Models\FantasyTeam;
 use App\Models\FantasyTeamPlayer;
+use App\Models\FantasyTransaction;
 use App\Services\Automation\SquadListingService;
-use App\Services\FantasyApi\DTOs\FantasyActivityDTO;
 use App\Services\FantasyApi\DTOs\FantasyPlayerDTO;
 use App\Services\FantasyApi\DTOs\FantasyRosterEntryDTO;
 use App\Services\FantasyApi\FantasyLeagueService;
@@ -44,6 +44,7 @@ class FantasySyncService
         private readonly FantasyMarketService $marketService,
         private readonly SquadListingService $squadListingService,
         private readonly AlertService $alerts,
+        private readonly LeagueActivitySync $activitySync,
     ) {}
 
     /**
@@ -206,14 +207,11 @@ class FantasySyncService
     }
 
     /**
-     * Backfills `purchase_price`/`acquired_at` on the account's own roster
-     * from the league activity feed — the only place LaLiga records what was
-     * actually paid for a player (see FantasyActivityDTO). Scans pages
-     * newest-first and stops as soon as every player currently on the
-     * roster has a match, so most runs only touch one page; a player who
-     * has been on the roster since before the activity feed's history (or
-     * since league creation, which isn't logged as a transfer at all)
-     * simply keeps `purchase_price = null` rather than guessing.
+     * Mirrors the league activity feed (LeagueActivitySync) and backfills
+     * `purchase_price`/`acquired_at` on the account's own roster from it —
+     * the only place LaLiga records what was actually paid for a player. A
+     * player on the roster since league creation (never logged as a
+     * purchase) simply keeps `purchase_price = null` rather than guessing.
      *
      * @return int number of roster players whose purchase price was found
      */
@@ -221,55 +219,33 @@ class FantasySyncService
     {
         $team = $account->activeTeam;
         $league = $account->activeLeague;
-        $myManagerId = $account->fantasy_user_id;
 
-        if (! $team || ! $league || ! $myManagerId) {
+        if (! $team || ! $league) {
             return 0;
         }
 
-        $pendingPlayerIds = $team->teamPlayers()->pluck('fantasy_player_id')->all();
-        $resolved = [];
+        // The whole league's money movements (also what the Activity screen,
+        // the trade ledger and the notifications read).
+        $this->activitySync->sync($account);
 
-        for ($index = 0; $index < 50 && count($resolved) < count($pendingPlayerIds); $index++) {
-            $page = $this->leagueService->getActivity($account, $league->external_id, $index);
+        // Each roster player's price = what you paid the most recent time he
+        // came to your team (bought back after selling him counts the last time).
+        $resolved = 0;
+        foreach ($team->teamPlayers()->get() as $entry) {
+            $purchase = FantasyTransaction::where('fantasy_league_id', $league->id)
+                ->where('fantasy_player_id', $entry->fantasy_player_id)
+                ->where('to_team_id', $team->id)
+                ->whereIn('type', [FantasyTransaction::TYPE_MARKET_BUY, FantasyTransaction::TYPE_TRANSFER])
+                ->orderByDesc('occurred_at')
+                ->first(['amount', 'occurred_at']);
 
-            if (empty($page)) {
-                break;
-            }
-
-            foreach ($page as $dto) {
-                if (
-                    $dto->activityTypeId !== FantasyActivityDTO::TYPE_OWNERSHIP_TRANSFER
-                    || $dto->buyerExternalId !== $myManagerId
-                    || ! $dto->playerExternalId
-                    || $dto->amount === null
-                ) {
-                    continue;
-                }
-
-                $player = FantasyPlayer::firstWhere('external_id', $dto->playerExternalId);
-
-                if (! $player || ! in_array($player->id, $pendingPlayerIds, true) || isset($resolved[$player->id])) {
-                    continue;
-                }
-
-                // Pages come back newest-first, so the first match for a
-                // given player is already its most recent acquisition —
-                // relevant for a player bought, sold, then bought back.
-                $resolved[$player->id] = [
-                    'amount' => $dto->amount,
-                    'occurredAt' => $dto->occurredAt ? $this->parseDate($dto->occurredAt) : null,
-                ];
+            if ($purchase) {
+                $entry->update(['purchase_price' => $purchase->amount, 'acquired_at' => $purchase->occurred_at]);
+                $resolved++;
             }
         }
 
-        foreach ($resolved as $playerId => $purchase) {
-            FantasyTeamPlayer::where('fantasy_team_id', $team->id)
-                ->where('fantasy_player_id', $playerId)
-                ->update(['purchase_price' => $purchase['amount'], 'acquired_at' => $purchase['occurredAt']]);
-        }
-
-        return count($resolved);
+        return $resolved;
     }
 
     /**
@@ -541,16 +517,22 @@ class FantasySyncService
         foreach ($standings as $dto) {
             $team = FantasyTeam::where('fantasy_league_id', $league->id)->where('external_id', $dto->teamExternalId)->first();
 
+            $managerId = data_get($dto->raw, 'team.managerId');
+
             if ($team) {
                 // Don't clobber the "is_mine" team's own richer name/data from
                 // selectLeague(); only backfill a name for rivals we don't own.
                 if (! $team->is_mine && $dto->teamName) {
                     $team->update(['name' => $dto->teamName]);
                 }
+                if ($managerId !== null && $team->manager_external_id !== (string) $managerId) {
+                    $team->update(['manager_external_id' => (string) $managerId]);
+                }
             } else {
                 $team = FantasyTeam::create([
                     'fantasy_league_id' => $league->id,
                     'external_id' => $dto->teamExternalId,
+                    'manager_external_id' => $managerId !== null ? (string) $managerId : null,
                     'name' => $dto->teamName ?? 'Equip desconegut',
                     'is_mine' => false,
                 ]);
