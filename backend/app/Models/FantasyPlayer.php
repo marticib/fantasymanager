@@ -3,8 +3,6 @@
 namespace App\Models;
 
 use Carbon\CarbonInterface;
-use Closure;
-use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -44,44 +42,40 @@ class FantasyPlayer extends Model
         return $this->hasMany(FantasyPlayerSnapshot::class)->orderBy('captured_at');
     }
 
-    /**
-     * Eager-load constraint for list screens:
-     * `->with(['player.snapshots' => FantasyPlayer::valueSnapshotsConstraint()])`
-     * — one query for every row's history instead of several per player.
+    /*
+     * Trend/growth calculations only ever read a handful of points from a
+     * player's value history, so they look those points up one indexed row
+     * at a time instead of loading the history. In production every player
+     * accumulates thousands of snapshots (one per sync since the season
+     * started): loading whole histories was the main cost of every screen,
+     * and eager-loading them for a whole list exhausted PHP's 128 MB limit.
      */
-    public static function valueSnapshotsConstraint(): Closure
+
+    public function latestValueSnapshot(): ?FantasyPlayerSnapshot
     {
-        return fn ($query) => $query
+        return $this->snapshots()
             ->whereNotNull('market_value')
-            ->select(['id', 'fantasy_player_id', 'market_value', 'captured_at']);
+            ->reorder('captured_at', 'desc')
+            ->first(['market_value', 'captured_at']);
     }
 
-    /**
-     * Market-value snapshots, oldest first, optionally only those captured
-     * since $since. Served from the eager-loaded relation when the caller
-     * preloaded it (see valueSnapshotsConstraint()), otherwise queried.
-     *
-     * @return Collection<int, FantasyPlayerSnapshot>
-     */
-    public function valueSnapshots(?CarbonInterface $since = null): Collection
+    /** The most recent value snapshot captured at or before $at (and, optionally, not before $notBefore). */
+    public function valueSnapshotAtOrBefore(CarbonInterface $at, ?CarbonInterface $notBefore = null): ?FantasyPlayerSnapshot
     {
-        if ($this->relationLoaded('snapshots')) {
-            $snapshots = $this->snapshots->whereNotNull('market_value');
+        $query = $this->snapshots()
+            ->whereNotNull('market_value')
+            ->where('captured_at', '<=', $at);
 
-            if ($since) {
-                $snapshots = $snapshots->filter(fn (FantasyPlayerSnapshot $s) => $s->captured_at->greaterThanOrEqualTo($since));
-            }
-
-            return $snapshots->values();
+        if ($notBefore) {
+            $query->where('captured_at', '>=', $notBefore);
         }
 
-        $query = $this->snapshots()->whereNotNull('market_value');
+        return $query->reorder('captured_at', 'desc')->first(['market_value', 'captured_at']);
+    }
 
-        if ($since) {
-            $query->where('captured_at', '>=', $since);
-        }
-
-        return $query->get(['market_value', 'captured_at']);
+    public function valueSnapshotCount(): int
+    {
+        return $this->snapshots()->whereNotNull('market_value')->reorder()->count();
     }
 
     public function teamPlayers(): HasMany

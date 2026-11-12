@@ -7,7 +7,6 @@ use App\Http\Resources\FantasyRecommendationResource;
 use App\Models\FantasyClub;
 use App\Models\FantasyExternalTrend;
 use App\Models\FantasyMarketPlayer;
-use App\Models\FantasyPlayer;
 use App\Models\FantasyRecommendation;
 use App\Services\FantasyApi\Exceptions\FantasyApiException;
 use App\Services\FantasyApi\FantasyMarketService;
@@ -51,7 +50,7 @@ class MarketController extends Controller
         $totalAvailable = (clone $base)->count();
         $closesAt = (clone $base)->whereNotNull('expires_at')->min('expires_at');
 
-        $query = (clone $base)->with(['player.snapshots' => FantasyPlayer::valueSnapshotsConstraint(), 'sellerTeam']);
+        $query = (clone $base)->with('player', 'sellerTeam');
 
         if ($position = $request->query('position')) {
             $query->whereHas('player', fn ($q) => $q->where('position', $position));

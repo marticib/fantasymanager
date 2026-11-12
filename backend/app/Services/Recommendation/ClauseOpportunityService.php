@@ -64,7 +64,7 @@ class ClauseOpportunityService
         $rivalEntries = FantasyTeamPlayer::query()
             ->whereHas('team', fn ($q) => $q->where('fantasy_league_id', $league->id)->where('is_mine', false))
             ->whereNotNull('clause_value')
-            ->with(['player.snapshots' => FantasyPlayer::valueSnapshotsConstraint(), 'team'])
+            ->with(['player', 'team'])
             ->get();
 
         $externalTrends = FantasyExternalTrend::where('source', 'futbolfantasy')

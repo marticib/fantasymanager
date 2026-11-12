@@ -4,7 +4,6 @@ namespace App\Services\Recommendation;
 
 use App\Models\FantasyExternalTrend;
 use App\Models\FantasyPlayer;
-use App\Models\FantasyPlayerSnapshot;
 use Illuminate\Support\Carbon;
 
 /**
@@ -45,10 +44,12 @@ class PlayerValueTrendCalculator
     public function historicalValues(FantasyPlayer $player, float $currentValue, ?FantasyExternalTrend $externalTrend): array
     {
         $now = now();
-        $snapshots = $player->valueSnapshots($now->copy()->subDays(10));
+        $windowStart = $now->copy()->subDays(10);
 
-        $closestBefore = function (Carbon $target) use ($snapshots): ?float {
-            $snapshot = $snapshots->filter(fn (FantasyPlayerSnapshot $s) => $s->captured_at->lessThanOrEqualTo($target))->last();
+        // One indexed row per mark rather than the whole 10-day window (see
+        // FantasyPlayer::latestValueSnapshot()) — same snapshot either way.
+        $closestBefore = function (Carbon $target) use ($player, $windowStart): ?float {
+            $snapshot = $player->valueSnapshotAtOrBefore($target, $windowStart);
 
             return $snapshot?->market_value !== null ? (float) $snapshot->market_value : null;
         };

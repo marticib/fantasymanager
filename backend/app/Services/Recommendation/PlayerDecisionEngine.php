@@ -7,7 +7,6 @@ use App\Models\FantasyExternalTrend;
 use App\Models\FantasyMarketPlayer;
 use App\Models\FantasyOffer;
 use App\Models\FantasyPlayer;
-use App\Models\FantasyPlayerSnapshot;
 use App\Models\FantasyTeam;
 use App\Models\FantasyTeamPlayer;
 use App\Services\Recommendation\ValueObjects\PlayerDecisionResult;
@@ -110,7 +109,7 @@ class PlayerDecisionEngine
             return collect();
         }
 
-        $teamPlayers = $team->teamPlayers()->with(['player.snapshots' => FantasyPlayer::valueSnapshotsConstraint()])->get()->filter(fn (FantasyTeamPlayer $tp) => $tp->player);
+        $teamPlayers = $team->teamPlayers()->with('player')->get()->filter(fn (FantasyTeamPlayer $tp) => $tp->player);
         $rules = $this->settings->rules($account);
         $availableCapital = max(0, (int) ($team->money ?? 0) - (int) $rules['minimum_cash_reserve']);
 
@@ -439,7 +438,7 @@ class PlayerDecisionEngine
         $listings = FantasyMarketPlayer::where('fantasy_league_id', $league->id)
             ->where('is_on_market', true)
             ->whereNotIn('fantasy_player_id', $ownedIds)
-            ->with(['player.snapshots' => FantasyPlayer::valueSnapshotsConstraint()])
+            ->with('player')
             ->get()
             ->filter(fn (FantasyMarketPlayer $m) => $m->player && $m->player->position);
 
@@ -576,10 +575,12 @@ class PlayerDecisionEngine
     private function historicalValues(FantasyPlayer $player, float $currentValue, ?FantasyExternalTrend $externalTrend): array
     {
         $now = now();
-        $snapshots = $player->valueSnapshots($now->copy()->subDays(10));
+        $windowStart = $now->copy()->subDays(10);
 
-        $closestBefore = function (Carbon $target) use ($snapshots): ?float {
-            $snapshot = $snapshots->filter(fn (FantasyPlayerSnapshot $s) => $s->captured_at->lessThanOrEqualTo($target))->last();
+        // One indexed row per mark rather than the whole 10-day window (see
+        // FantasyPlayer::latestValueSnapshot()) — same snapshot either way.
+        $closestBefore = function (Carbon $target) use ($player, $windowStart): ?float {
+            $snapshot = $player->valueSnapshotAtOrBefore($target, $windowStart);
 
             return $snapshot?->market_value !== null ? (float) $snapshot->market_value : null;
         };

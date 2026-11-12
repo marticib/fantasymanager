@@ -396,7 +396,7 @@ class TodayActionsService
         $listings = FantasyMarketPlayer::where('fantasy_league_id', $league->id)
             ->where('is_on_market', true)
             ->whereNull('seller_team_id')
-            ->with(['player.snapshots' => FantasyPlayer::valueSnapshotsConstraint()])
+            ->with('player')
             ->get()
             ->filter(fn (FantasyMarketPlayer $l) => $l->player && $l->market_value);
 

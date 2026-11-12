@@ -7,7 +7,6 @@ use App\Http\Resources\FantasyPlayerResource;
 use App\Http\Resources\FantasyTeamResource;
 use App\Models\FantasyExternalTrend;
 use App\Models\FantasyMarketPlayer;
-use App\Models\FantasyPlayer;
 use App\Models\FantasyTeam;
 use App\Services\Automation\SquadListingService;
 use App\Services\FantasyApi\DTOs\FantasyMarketOfferDTO;
@@ -44,7 +43,7 @@ class TeamController extends Controller
         $externalTrends = FantasyExternalTrend::where('source', 'futbolfantasy')->get()->keyBy('fantasy_player_id');
         $decisions = $decisionEngine->evaluateRoster($account);
 
-        $players = $team->teamPlayers()->with(['player.snapshots' => FantasyPlayer::valueSnapshotsConstraint()])->get()
+        $players = $team->teamPlayers()->with('player')->get()
             ->map(function ($tp) use ($account, $externalTrends, $presenter, $decisions) {
                 if (! $tp->player) {
                     return null;
@@ -115,7 +114,7 @@ class TeamController extends Controller
 
         $externalTrends = FantasyExternalTrend::where('source', 'futbolfantasy')->get()->keyBy('fantasy_player_id');
 
-        $players = $team->teamPlayers()->with(['player.snapshots' => FantasyPlayer::valueSnapshotsConstraint()])->get()
+        $players = $team->teamPlayers()->with('player')->get()
             ->map(function ($tp) use ($account, $externalTrends, $presenter, $rivalClausePresenter) {
                 if (! $tp->player) {
                     return null;

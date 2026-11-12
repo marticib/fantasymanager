@@ -26,10 +26,34 @@ class TrendAnalysisService
 
     public function analyze(FantasyPlayer $player): PlayerTrend
     {
-        return $this->analyzeSnapshots($player->valueSnapshots());
+        $latest = $player->latestValueSnapshot();
+
+        if (! $latest) {
+            return $this->analyzeSnapshots(collect());
+        }
+
+        // Only the points analyzeSnapshots() actually reads — the closest
+        // snapshot at or before each lookback mark, plus the latest — instead
+        // of the player's whole history (see FantasyPlayer::latestValueSnapshot()).
+        // Each one is exactly what closestBefore() would pick from the full
+        // history, so the result is identical.
+        $now = $latest->captured_at;
+        $points = collect([
+            $player->valueSnapshotAtOrBefore($now->copy()->subDays(7)),
+            $player->valueSnapshotAtOrBefore($now->copy()->subDays(3)),
+            $player->valueSnapshotAtOrBefore($now->copy()->subDays(2)),
+            $player->valueSnapshotAtOrBefore($now->copy()->subDay()),
+            $latest,
+        ])->filter()->values();
+
+        return $this->analyzeSnapshots($points, $player->valueSnapshotCount());
     }
 
-    public function analyzeSnapshots(Collection $snapshots): PlayerTrend
+    /**
+     * @param  Collection<int, FantasyPlayerSnapshot>  $snapshots  ordered ascending by captured_at
+     * @param  int|null  $snapshotCount  total history size when $snapshots is only a sample of it
+     */
+    public function analyzeSnapshots(Collection $snapshots, ?int $snapshotCount = null): PlayerTrend
     {
         if ($snapshots->isEmpty()) {
             return new PlayerTrend(null, null, null, null, null, null, null, null, PlayerTrend::ESTABLE, 0);
@@ -73,7 +97,7 @@ class TrendAnalysisService
             pctChange7d: $pctChange7d,
             acceleration: $acceleration,
             classification: $this->classify($pctChange3d, $change24h, $latest->market_value),
-            snapshotCount: $snapshots->count(),
+            snapshotCount: $snapshotCount ?? $snapshots->count(),
         );
     }
 
