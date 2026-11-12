@@ -275,6 +275,37 @@ class TradingControllerTest extends TestCase
         }
     }
 
+    public function test_a_player_marked_to_keep_is_never_sold_and_the_plan_is_recomputed(): void
+    {
+        $this->myTeam->update(['money' => 3_500_000]); // nothing deployable after the reserve
+        $flat = $this->player('Flat', 'MF', 12_000_000);
+        $this->ff($flat, 12_000_000, 11_990_000, 11_980_000, 11_960_000);
+        $this->own($flat);
+        $other = $this->player('Other', 'DF', 12_000_000);
+        $this->ff($other, 12_000_000, 11_995_000, 11_985_000, 11_970_000);
+        $this->own($other);
+        $target = $this->player('Riser', 'FW', 10_000_000);
+        $this->ffRising($target);
+        $this->listing($target);
+
+        $sold = fn (array $data) => array_column(array_filter($data['movements'], fn ($m) => $m['type'] === 'SELL'), 'playerId');
+
+        $before = $this->makeMoney();
+        $firstSold = $sold($before)[0];
+        $after = $this->makeMoney('?keep[]='.$firstSold);
+
+        $this->assertNotContains($firstSold, $sold($after));
+        $this->assertSame([['playerId' => $firstSold, 'name' => $firstSold === $flat->id ? 'Flat' : 'Other']], $after['keptPlayers']);
+        // The purchase is still funded, now by selling the other player.
+        $this->assertContains($target->id, array_column($after['movements'], 'playerId'));
+        $this->assertSame([$firstSold === $flat->id ? $other->id : $flat->id], $sold($after));
+
+        // Keeping both: nothing left to fund it with.
+        $both = $this->plans('?keep='.$flat->id.','.$other->id);
+        $this->assertSame([], $sold($both['plans'][14]));
+        $this->assertSame('KEEP_CASH', $both['plans'][14]['state']);
+    }
+
     public function test_a_falling_own_player_is_sold_to_avoid_the_expected_loss_and_no_purchase_is_forced(): void
     {
         $mine = $this->player('Faller', 'MF', 10_000_000);

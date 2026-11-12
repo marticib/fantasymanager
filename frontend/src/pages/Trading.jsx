@@ -67,7 +67,7 @@ function HorizonCard({ horizon, plan, active, best, onSelect }) {
   )
 }
 
-function MoveRow({ move, horizon, onBid }) {
+function MoveRow({ move, horizon, onBid, onKeep }) {
   const meta = MOVE_META[move.type]
   const isSell = move.type === 'SELL'
   const later = move.payableInDays != null
@@ -128,16 +128,25 @@ function MoveRow({ move, horizon, onBid }) {
           </Link>
         )}
         {isSell && (
-          <Link to="/sales" className="flex min-h-9 shrink-0 items-center rounded-lg bg-bear/15 px-3 text-xs font-semibold text-bear hover:bg-bear/25">
-            Vendes
-          </Link>
+          <div className="flex shrink-0 gap-2">
+            <button
+              onClick={() => onKeep(move.playerId)}
+              title="Recalcula el pla sense vendre aquest jugador"
+              className="min-h-9 rounded-lg border border-border px-3 text-xs font-semibold text-muted-foreground hover:border-primary/50 hover:text-foreground"
+            >
+              No vendre
+            </button>
+            <Link to="/sales" className="flex min-h-9 items-center rounded-lg bg-bear/15 px-3 text-xs font-semibold text-bear hover:bg-bear/25">
+              Vendes
+            </Link>
+          </div>
         )}
       </div>
     </div>
   )
 }
 
-function MoveGroup({ title, total, totalLabel, moves, horizon, onBid }) {
+function MoveGroup({ title, total, totalLabel, moves, horizon, onBid, onKeep }) {
   if (moves.length === 0) return null
   return (
     <section className="panel overflow-hidden">
@@ -151,7 +160,7 @@ function MoveGroup({ title, total, totalLabel, moves, horizon, onBid }) {
       </div>
       <div className="divide-y divide-border">
         {moves.map((move) => (
-          <MoveRow key={`${move.type}-${move.playerId}`} move={move} horizon={horizon} onBid={onBid} />
+          <MoveRow key={`${move.type}-${move.playerId}`} move={move} horizon={horizon} onBid={onBid} onKeep={onKeep} />
         ))}
       </div>
     </section>
@@ -164,6 +173,11 @@ export default function Trading() {
   const [loading, setLoading] = useState(true)
   const [respectReserve, setRespectReserve] = usePersistentState('trading-respect-reserve', true)
   const [allowSales, setAllowSales] = usePersistentState('trading-allow-sales', true)
+  // Own players the user doesn't want sold; changing it recomputes every plan.
+  const [keepIds, setKeepIds] = usePersistentState('trading-keep-players', [])
+  const keepParam = [...keepIds].sort((a, b) => a - b).join(',')
+  const keepPlayer = (id) => setKeepIds((ids) => (ids.includes(id) ? ids : [...ids, id]))
+  const allowSale = (id) => setKeepIds((ids) => ids.filter((x) => x !== id))
   const [selected, setSelected] = usePersistentState('trading-horizon', null)
   const [pendingBid, setPendingBid] = useState(null)
 
@@ -171,13 +185,15 @@ export default function Trading() {
     setLoading(true)
     setError('')
     apiClient
-      .get('/trading/plans', { params: { respect_reserve: respectReserve ? 1 : 0, allow_sales: allowSales ? 1 : 0 } })
+      .get('/trading/plans', {
+        params: { respect_reserve: respectReserve ? 1 : 0, allow_sales: allowSales ? 1 : 0, ...(keepParam ? { keep: keepParam } : {}) },
+      })
       .then((res) => setPayload(res.data))
       .catch((err) => setError(err.response?.data?.message || "No s'han pogut calcular els plans."))
       .finally(() => setLoading(false))
   }
 
-  useEffect(load, [respectReserve, allowSales])
+  useEffect(load, [respectReserve, allowSales, keepParam])
   useAppEvent(DATA_CHANGED, load)
 
   if (error && !payload) return <ErrorState message={error} onRetry={load} />
@@ -247,6 +263,27 @@ export default function Trading() {
 
       <h2 className="mt-6 text-xl font-bold">Pla a {horizon} dies</h2>
 
+      {allowSales && plan.keptPlayers?.length > 0 && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-muted-foreground">No vendre:</span>
+          {plan.keptPlayers.map((p) => (
+            <button
+              key={p.playerId}
+              onClick={() => allowSale(p.playerId)}
+              title="Tornar a permetre que el pla el vengui"
+              className="inline-flex min-h-8 items-center gap-1.5 rounded-full border border-border bg-surface-raised/60 px-3 text-xs font-semibold hover:border-bear/50"
+            >
+              {p.name} <span aria-hidden="true" className="text-muted-foreground">×</span>
+            </button>
+          ))}
+          {plan.keptPlayers.length > 1 && (
+            <button onClick={() => setKeepIds([])} className="text-xs font-semibold text-primary hover:underline">
+              Treure'ls tots
+            </button>
+          )}
+        </div>
+      )}
+
       <div className="panel mt-3 grid grid-cols-2 gap-4 p-4 sm:grid-cols-4 sm:p-5">
         <div>
           <p className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -296,6 +333,7 @@ export default function Trading() {
             moves={plan.movements.filter((m) => m.type === 'SELL')}
             horizon={horizon}
             onBid={openBid}
+            onKeep={keepPlayer}
           />
           <MoveGroup
             title={plan.movements.some((m) => m.type === 'SELL') ? '2. Comprar' : 'Comprar'}
@@ -304,6 +342,7 @@ export default function Trading() {
             moves={plan.movements.filter((m) => m.type !== 'SELL')}
             horizon={horizon}
             onBid={openBid}
+            onKeep={keepPlayer}
           />
           <p className="text-xs text-muted-foreground">
             Després del pla et queden {formatMoney(summary.cashAfter)} de caixa. Només es proposen moviments amb un guany esperat d'almenys{' '}

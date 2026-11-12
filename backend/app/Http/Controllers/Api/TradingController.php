@@ -34,12 +34,13 @@ class TradingController extends Controller
         }
         $respectReserve = $request->boolean('respect_reserve', true);
         $allowSales = $request->boolean('allow_sales', true);
+        $keep = $this->keepPlayerIds($request);
 
         return $this->respond(
             $account,
             'make-money',
-            ['horizon' => $horizon, 'reserve' => $respectReserve, 'sales' => $allowSales],
-            fn () => $service->build($account, $horizon, $respectReserve, $allowSales),
+            ['horizon' => $horizon, 'reserve' => $respectReserve, 'sales' => $allowSales, 'keep' => $keep],
+            fn () => $service->build($account, $horizon, $respectReserve, $allowSales, $keep),
         );
     }
 
@@ -49,13 +50,29 @@ class TradingController extends Controller
         $account = $this->currentAccount($request);
         $respectReserve = $request->boolean('respect_reserve', true);
         $allowSales = $request->boolean('allow_sales', true);
+        $keep = $this->keepPlayerIds($request);
 
         return $this->respond(
             $account,
             'plans',
-            ['reserve' => $respectReserve, 'sales' => $allowSales],
-            fn () => $service->buildAll($account, $respectReserve, $allowSales),
+            ['reserve' => $respectReserve, 'sales' => $allowSales, 'keep' => $keep],
+            fn () => $service->buildAll($account, $respectReserve, $allowSales, $keep),
         );
+    }
+
+    /**
+     * Own players the user marked "don't sell": `keep[]=12&keep[]=34` or `keep=12,34`.
+     *
+     * @return list<int> sorted and unique, so the cache key doesn't depend on order
+     */
+    private function keepPlayerIds(Request $request): array
+    {
+        $raw = $request->query('keep', []);
+        $values = is_array($raw) ? $raw : explode(',', (string) $raw);
+        $ids = array_values(array_unique(array_filter(array_map('intval', $values), fn ($id) => $id > 0)));
+        sort($ids);
+
+        return $ids;
     }
 
     private function horizon(Request $request): ?int
