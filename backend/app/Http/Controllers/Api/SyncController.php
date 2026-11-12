@@ -19,11 +19,14 @@ class SyncController extends Controller
         $account = $this->currentAccount($request);
 
         if (! $account->hasValidTokens()) {
-            return response()->json(['message' => 'Configure your LaLiga Fantasy tokens first.'], 422);
+            return response()->json(['message' => 'Primer has de connectar el teu compte de LaLiga a Configuració.'], 422);
         }
 
+        // Lets the header show real progress (see DashboardController::header())
+        // until the queued job actually finishes, instead of a fixed spinner.
+        RunFantasySyncJob::markRunning($account->id);
         RunFantasySyncJob::dispatch($account->id);
 
-        return response()->json(['message' => 'Sync queued.'], 202);
+        return response()->json(['message' => 'Sincronització en curs.'], 202);
     }
 }

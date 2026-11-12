@@ -4,9 +4,15 @@ import apiClient from '../api/client'
 import { cachedGet, updateCached } from '../api/cachedGet'
 import ScoreRing from '../components/ScoreRing'
 import Sparkline from '../components/Sparkline'
-import BidModal from '../components/BidModal'
+import ActionModal from '../components/ActionModal'
+import BidDialog from '../components/BidDialog'
+import InfoTip from '../components/InfoTip'
+import { PageSkeleton, EmptyState, ErrorState } from '../components/PageState'
 import { ShopIcon, ArrowRightIcon, ChevronDownIcon } from '../components/Icons'
-import { formatMoneyM, formatDelta, formatPercent, formatCountdown, POSITION_LABELS, initials } from '../utils/format'
+import { SearchX } from 'lucide-react'
+import { usePersistentState } from '../lib/storage'
+import { DATA_CHANGED, useAppEvent } from '../lib/appEvents'
+import { formatMoney, formatMoneyM, formatDelta, formatPercent, formatCountdown, POSITION_LABELS, initials } from '../utils/format'
 
 const POSITIONS = ['GK', 'DF', 'MF', 'FW']
 const TREND_OPTIONS = [
@@ -23,6 +29,21 @@ const ECONOMIC_BADGE = {
 }
 
 const ECONOMIC_LABEL = { BUY: 'COMPRAR', CONSIDER: 'CONSIDERAR', WAIT: 'ESPERAR', DO_NOT_BUY: 'NO COMPRAR' }
+
+const DEFAULT_FILTERS = { position: null, maxPriceM: 20, minScore: 0, trend: null, freeAgentOnly: true }
+
+const EXT_SOURCE_HELP = 'Dada de futbolfantasy.com (font externa, no oficial). Es fa servir mentre encara no tenim prou historial propi del jugador.'
+
+/** Bid presets for a listing: current value, the recommended bid (unless it's not worth chasing) and the maximum. */
+function bidPresets(row, overrides = {}) {
+  const b = row.buyAnalysis
+  const recommended = overrides.recommended ?? (b ? (b.recommendedBid === 'DO_NOT_CHASE' ? null : b.recommendedBid) : row.recommendedBid)
+  return [
+    { key: 'value', label: 'Valor', amount: row.marketValue },
+    { key: 'recommended', label: 'Recomanada', amount: typeof recommended === 'number' ? recommended : null },
+    { key: 'max', label: 'Màxim', amount: overrides.max ?? b?.maxBid ?? row.maxBid ?? null },
+  ]
+}
 
 const SORT_ACCESSORS = {
   player: (r) => r.player.name,
@@ -67,12 +88,12 @@ function BuyStat({ label, value, colorClass, onBid, busy }) {
   return (
     <div className="text-center">
       <p className={`text-lg font-bold ${colorClass || ''}`}>{value}</p>
-      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</p>
       {onBid && (
         <button
           onClick={onBid}
           disabled={busy}
-          className="mt-1.5 rounded-md border border-border px-2 py-1 text-[11px] font-semibold text-muted-foreground hover:border-bull hover:text-bull disabled:opacity-50"
+          className="mt-1.5 min-h-9 rounded-md border border-border px-3 py-1 text-xs font-semibold text-muted-foreground hover:border-bull hover:text-bull disabled:opacity-50"
         >
           Pujar
         </button>
@@ -94,19 +115,16 @@ function MarketRow({ row, onBid, onCancelBid }) {
             const eurDelta = own ?? row.externalTrend?.delta1d
             if (eurDelta == null) return <span className="text-muted-foreground">—</span>
             return (
-              <span
-                className={eurDelta > 0 ? 'text-bull' : eurDelta < 0 ? 'text-bear' : 'text-muted-foreground'}
-                title={own == null ? 'Font externa (futbolfantasy.com, no oficial) — encara no tenim prou historial propi' : undefined}
-              >
+              <span className={eurDelta > 0 ? 'text-bull' : eurDelta < 0 ? 'text-bear' : 'text-muted-foreground'}>
                 {eurDelta >= 0 ? '↗' : '↘'} {formatDelta(eurDelta)}
-                {own == null && <span className="text-[9px] text-muted-foreground"> *ext.</span>}
+                {own == null && <span className="text-[11px] text-muted-foreground"> *ext.</span>}
               </span>
             )
           })()}
         </td>
         <td className="px-4 py-3">
           <Link to={`/players/${row.player.id}`} className="flex items-center gap-2.5 hover:text-primary">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted-foreground/15 text-[10px] font-bold text-muted-foreground">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted-foreground/15 text-[11px] font-bold text-muted-foreground">
               {row.player.imageUrl ? (
                 <img src={row.player.imageUrl} alt="" className="h-full w-full object-cover" />
               ) : (
@@ -117,7 +135,7 @@ function MarketRow({ row, onBid, onCancelBid }) {
               <p className="truncate font-medium">{row.player.name}</p>
               <p className="truncate text-xs text-muted-foreground">{row.player.clubShort || row.player.club || '—'}</p>
               {row.myBid && (
-                <p className="num truncate text-[11px] font-semibold text-primary">La teva oferta: {formatMoneyM(row.myBid.money)}</p>
+                <p className="num truncate text-xs font-semibold text-primary">La teva oferta: {formatMoney(row.myBid.money)}</p>
               )}
             </div>
           </Link>
@@ -129,22 +147,14 @@ function MarketRow({ row, onBid, onCancelBid }) {
         </td>
         <td className="px-4 py-3 text-muted-foreground">{row.sellerTeam || <span className="italic">Mercat lliure</span>}</td>
         <td className="num px-4 py-3 font-medium">{formatMoneyM(row.marketValue)}</td>
-        <td
-          className="w-24 px-4 py-3"
-          title={
-            row.historySource === 'external'
-              ? "Línia reconstruïda amb dades de futbolfantasy.com (no oficial) — encara no tenim prou historial propi"
-              : undefined
-          }
-        >
+        <td className="w-24 px-4 py-3">
           <Sparkline data={row.history} />
-          {row.historySource === 'external' && <span className="text-[9px] text-muted-foreground">*ext.</span>}
+          {row.historySource === 'external' && <span className="text-[11px] text-muted-foreground">*ext.</span>}
         </td>
         <td
           className={`px-4 py-3 ${
             row.externalTrend?.pct7d > 0 ? 'text-bull' : row.externalTrend?.pct7d < 0 ? 'text-bear' : 'text-muted-foreground'
           }`}
-          title={row.externalTrend ? 'Font: futbolfantasy.com (no oficial)' : 'Sense dada externa'}
         >
           {row.externalTrend?.pct7d != null
             ? `${row.externalTrend.pct7d >= 0 ? '↗' : '↘'} ${formatPercent(row.externalTrend.pct7d)}`
@@ -160,26 +170,41 @@ function MarketRow({ row, onBid, onCancelBid }) {
         <td className="px-4 py-3">
           {b && (
             <div className="flex items-start gap-1">
-              <span
-                className={`inline-flex cursor-help rounded-md px-2 py-1 text-xs font-bold ${ECONOMIC_BADGE[b.recommendation]}`}
-                title="Anàlisi purament econòmica: si compro aquest jugador a aquest preu, és rentable? (ignora rendiment esportiu, titularitat i necessitat de plantilla)"
-              >
+              <span className={`inline-flex rounded-md px-2 py-1 text-xs font-bold ${ECONOMIC_BADGE[b.recommendation]}`}>
                 {ECONOMIC_LABEL[b.recommendation]}
               </span>
               <button
                 onClick={() => setOpen((o) => !o)}
-                className="mt-0.5 shrink-0 rounded p-0.5 text-muted-foreground hover:text-primary"
-                title="Veure el càlcul econòmic"
+                className="shrink-0 rounded p-1 text-muted-foreground hover:text-primary"
+                aria-label={open ? 'Amagar el càlcul' : 'Veure el càlcul'}
+                aria-expanded={open}
               >
-                <ChevronDownIcon className={`h-3.5 w-3.5 transition-transform ${open ? 'rotate-180' : ''}`} />
+                <ChevronDownIcon className={`h-4 w-4 transition-transform ${open ? 'rotate-180' : ''}`} />
               </button>
             </div>
+          )}
+        </td>
+        <td className="px-4 py-3 text-right">
+          {row.myBid ? (
+            <button
+              onClick={() => onCancelBid(row)}
+              className="min-h-9 rounded-md border border-border px-3 text-xs font-semibold text-muted-foreground hover:border-bear hover:text-bear"
+            >
+              Cancel·lar
+            </button>
+          ) : (
+            <button
+              onClick={() => onBid(row)}
+              className="min-h-9 rounded-md bg-bull/15 px-3 text-xs font-semibold text-bull hover:bg-bull/25"
+            >
+              Pujar
+            </button>
           )}
         </td>
       </tr>
       {open && b && (
         <tr className="border-b border-border bg-background/40 last:border-0">
-          <td colSpan={11} className="px-4 py-4">
+          <td colSpan={12} className="px-4 py-4">
             <BuyAnalysisDetail row={row} b={b} onBid={onBid} onCancelBid={onCancelBid} />
           </td>
         </tr>
@@ -193,11 +218,11 @@ function BuyAnalysisDetail({ row, b, onBid, onCancelBid }) {
     <div className="grid gap-4 lg:grid-cols-[1fr_auto]">
       <div>
         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Buy Economic Score — {b.classification}
+          Valoració econòmica — {b.classification}
         </p>
         <p className="mt-1.5 text-sm text-foreground">
-          Preu d'adquisició {formatMoneyM(b.acquisitionPrice)} · valor projectat a 14 dies{' '}
-          {formatMoneyM(b.projectedValue14d)} · ROI 14d {formatPercent(b.expectedROI14d * 100)}.{' '}
+          Preu de compra estimat {formatMoneyM(b.acquisitionPrice)} · valor previst d'aquí a 14 dies{' '}
+          {formatMoneyM(b.projectedValue14d)} · rendiment en 14 dies {formatPercent(b.expectedROI14d * 100)}.{' '}
           {b.breakEvenDays === 0
             ? 'Ja recupera la inversió avui mateix (preu igual o per sota del valor de mercat).'
             : b.breakEvenDays !== null
@@ -205,37 +230,29 @@ function BuyAnalysisDetail({ row, b, onBid, onCancelBid }) {
               : 'No es preveu recuperar la inversió dins del termini simulat.'}
         </p>
         <p className="mt-2 text-xs text-muted-foreground">
-          Oferta guanyadora estimada {formatMoneyM(b.estimatedWinningBid)} (prima{' '}
+          Oferta guanyadora estimada {formatMoneyM(b.estimatedWinningBid)} (sobrecost sobre el valor{' '}
           {formatPercent(b.expectedWinningPremium * 100)},{' '}
           {b.auctionHistorySource === 'league' ? "historial real d'aquesta lliga" : 'valor per defecte, encara sense historial'})
-          {b.bidCount != null && ` · ${b.bidCount} ofertes en aquesta subhasta`} · dades {b.dataQuality}%.
+          {b.bidCount != null && ` · ${b.bidCount} ofertes en aquesta subhasta`} · fiabilitat de les dades {b.dataQuality}%.
         </p>
       </div>
       <div className="flex shrink-0 flex-wrap gap-5 border-t border-border pt-3 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-5">
-        <BuyStat label="Score" value={b.buyEconomicScore} colorClass="text-primary" />
-        <BuyStat
-          label="Valor"
-          value={formatMoneyM(row.marketValue)}
-          onBid={onBid && (() => onBid(row, row.marketValue, 'al valor actual'))}
-        />
-        <BuyStat
-          label="Màxim"
-          value={formatMoneyM(b.maxBid)}
-          onBid={onBid && (() => onBid(row, b.maxBid, 'màxima'))}
-        />
+        <BuyStat label="Valoració" value={b.buyEconomicScore} colorClass="text-primary" />
+        <BuyStat label="Valor" value={formatMoneyM(row.marketValue)} onBid={onBid && (() => onBid(row, 'value'))} />
+        <BuyStat label="Màxim" value={formatMoneyM(b.maxBid)} onBid={onBid && (() => onBid(row, 'max'))} />
         <BuyStat
           label="Oferta"
-          value={b.recommendedBid === 'DO_NOT_CHASE' ? 'No perseguir' : formatMoneyM(b.recommendedBid)}
-          colorClass={b.recommendedBid === 'DO_NOT_CHASE' ? 'text-bear' : 'text-bull'}
-          onBid={onBid && b.recommendedBid !== 'DO_NOT_CHASE' && (() => onBid(row, b.recommendedBid, 'recomanada'))}
+          value={b.recommendedBid === 'DO_NOT_CHASE' ? 'No val la pena pujar més' : formatMoneyM(b.recommendedBid)}
+          colorClass={b.recommendedBid === 'DO_NOT_CHASE' ? 'text-bear text-sm' : 'text-bull'}
+          onBid={onBid && b.recommendedBid !== 'DO_NOT_CHASE' && (() => onBid(row, 'recommended'))}
         />
         {row.myBid && (
           <div className="text-center">
-            <p className="num text-lg font-bold text-primary">{formatMoneyM(row.myBid.money)}</p>
-            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">La teva oferta</p>
+            <p className="num text-lg font-bold text-primary">{formatMoney(row.myBid.money)}</p>
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">La teva oferta</p>
             <button
               onClick={() => onCancelBid(row)}
-              className="mt-1.5 rounded-md border border-border px-2 py-1 text-[11px] font-semibold text-muted-foreground hover:border-bear hover:text-bear"
+              className="mt-1.5 min-h-9 rounded-md border border-border px-3 py-1 text-xs font-semibold text-muted-foreground hover:border-bear hover:text-bear"
             >
               Cancel·lar
             </button>
@@ -266,11 +283,11 @@ function MarketCard({ row, onBid, onCancelBid }) {
               {row.player.clubShort || row.player.club || '—'} · {POSITION_LABELS[row.player.position] || row.player.position}
             </p>
             {row.myBid && (
-              <p className="num truncate text-[11px] font-semibold text-primary">La teva oferta: {formatMoneyM(row.myBid.money)}</p>
+              <p className="num truncate text-xs font-semibold text-primary">La teva oferta: {formatMoney(row.myBid.money)}</p>
             )}
           </div>
         </div>
-        <span className={`num shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${scoreBadgeClass(row.fantasyScore)}`}>
+        <span className={`num shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${scoreBadgeClass(row.fantasyScore)}`} aria-label="Puntuació">
           {Math.round(row.fantasyScore)}
         </span>
       </button>
@@ -287,7 +304,7 @@ function MarketCard({ row, onBid, onCancelBid }) {
               }`}
             >
               {eurDelta >= 0 ? '↗' : '↘'} {formatDelta(eurDelta)}
-              {!isOwn && <span className="text-[9px] opacity-80"> *ext.</span>}
+              {!isOwn && <span className="text-[11px] opacity-80"> *ext.</span>}
             </span>
           )}
         </div>
@@ -312,6 +329,30 @@ function MarketCard({ row, onBid, onCancelBid }) {
         </div>
       )}
 
+      <div className="mt-3 flex gap-2">
+        {row.myBid ? (
+          <button
+            onClick={() => onCancelBid(row)}
+            className="min-h-11 flex-1 rounded-lg border border-border text-sm font-semibold text-muted-foreground hover:border-bear hover:text-bear"
+          >
+            Cancel·lar oferta
+          </button>
+        ) : (
+          <button onClick={() => onBid(row)} className="min-h-11 flex-1 rounded-lg bg-bull/15 text-sm font-semibold text-bull hover:bg-bull/25">
+            Pujar
+          </button>
+        )}
+        {b && (
+          <button
+            onClick={() => setOpen((o) => !o)}
+            className="min-h-11 rounded-lg border border-border px-3 text-sm font-semibold text-muted-foreground hover:text-foreground"
+            aria-expanded={open}
+          >
+            {open ? 'Amagar càlcul' : 'Veure càlcul'}
+          </button>
+        )}
+      </div>
+
       {open && b && (
         <div className="mt-3 border-t border-border pt-3">
           <BuyAnalysisDetail row={row} b={b} onBid={onBid} onCancelBid={onCancelBid} />
@@ -326,48 +367,47 @@ export default function Market() {
   const [meta, setMeta] = useState(null)
   const [error, setError] = useState('')
 
+  // Filters and sort survive leaving the page and coming back; the search box doesn't.
   const [search, setSearch] = useState('')
-  const [position, setPosition] = useState(null)
-  const [maxPriceM, setMaxPriceM] = useState(20)
-  const [minScore, setMinScore] = useState(0)
-  const [trend, setTrend] = useState(null)
-  const [freeAgentOnly, setFreeAgentOnly] = useState(true)
-  const [sort, setSort] = useState({ key: 'fantasyScore', direction: 'desc' })
+  const [filters, setFilters] = usePersistentState('market-filters', DEFAULT_FILTERS)
+  const [sort, setSort] = usePersistentState('market-sort', { key: 'fantasyScore', direction: 'desc' })
+  const { position, maxPriceM, minScore, trend, freeAgentOnly } = { ...DEFAULT_FILTERS, ...filters }
+  const setFilter = (key, value) => setFilters((f) => ({ ...DEFAULT_FILTERS, ...f, [key]: value }))
+  const filtersActive = search !== '' || JSON.stringify({ ...DEFAULT_FILTERS, ...filters }) !== JSON.stringify(DEFAULT_FILTERS)
+  const clearFilters = () => {
+    setSearch('')
+    setFilters(DEFAULT_FILTERS)
+  }
 
   const [pendingAction, setPendingAction] = useState(null)
+  const [pendingBid, setPendingBid] = useState(null)
 
   const load = () => {
+    setError('')
     cachedGet('/market', null, (d) => {
       setRows(d.data)
       setMeta(d.meta)
-    }).catch((err) => setError(err.response?.data?.message || 'Error carregant el mercat.'))
+    }).catch((err) => setError(err.response?.data?.message || "No s'ha pogut carregar el mercat."))
   }
 
   useEffect(load, [])
+  useAppEvent(DATA_CHANGED, load)
 
-  const askBid = (row, amount, label) => {
-    if (!amount || amount === 'DO_NOT_CHASE') return
-    const rounded = Math.round(amount)
-    setPendingAction({
-      title: 'Confirmar oferta',
-      description: (
-        <>
-          Pujar <span className="num font-semibold text-foreground">{formatMoneyM(rounded)}</span> ({label}) per{' '}
-          <span className="font-semibold text-foreground">{row.player.name}</span>?
-        </>
-      ),
-      confirmLabel: 'Pujar oferta',
-      run: async () => {
-        const { data } = await apiClient.post(`/market/${row.id}/bid`, { amount: rounded })
-        // Update the list the instant the request succeeds rather than
-        // waiting on a full reload — /market only reflects fantasy:sync-market's
-        // last tick (minutes away), so without this the bid/cancel would
-        // otherwise seem to do nothing until that next tick.
-        const patch = (r) => (r.id === row.id ? { ...r, myBid: data.myBid ?? { money: rounded } } : r)
-        setRows((prev) => prev.map(patch))
-        updateCached('/market', null, (d) => ({ ...d, data: d.data.map(patch) }))
-        return `Oferta ${label} de ${formatMoneyM(rounded)} enviada per ${row.player.name}.`
-      },
+  // Update the list the instant a bid/cancel succeeds rather than waiting on
+  // the next market sync (minutes away) — otherwise it seems to do nothing.
+  const patchRow = (id, changes) => {
+    const patch = (r) => (r.id === id ? { ...r, ...changes } : r)
+    setRows((prev) => prev.map(patch))
+    updateCached('/market', null, (d) => ({ ...d, data: d.data.map(patch) }))
+  }
+
+  const askBid = (row, initialKey = 'recommended', overrides) => {
+    setPendingBid({
+      playerName: row.player.name,
+      marketPlayerId: row.id,
+      presets: bidPresets(row, overrides),
+      initialKey,
+      onPlaced: (myBid) => patchRow(row.id, { myBid }),
     })
   }
 
@@ -376,16 +416,15 @@ export default function Market() {
       title: 'Cancel·lar oferta',
       description: (
         <>
-          Cancel·lar la teva oferta de <span className="num font-semibold text-foreground">{formatMoneyM(row.myBid.money)}</span> per{' '}
+          Retirar la teva oferta de <span className="num font-semibold text-foreground">{formatMoney(row.myBid.money)}</span> per{' '}
           <span className="font-semibold text-foreground">{row.player.name}</span>?
         </>
       ),
-      confirmLabel: 'Cancel·lar oferta',
+      confirmLabel: 'Sí, cancel·lar',
+      tone: 'danger',
       run: async () => {
         await apiClient.delete(`/market/${row.id}/bid`)
-        const patch = (r) => (r.id === row.id ? { ...r, myBid: null } : r)
-        setRows((prev) => prev.map(patch))
-        updateCached('/market', null, (d) => ({ ...d, data: d.data.map(patch) }))
+        patchRow(row.id, { myBid: null })
         return `Oferta cancel·lada per ${row.player.name}.`
       },
     })
@@ -431,14 +470,15 @@ export default function Market() {
 
   const top = useMemo(() => sorted.find((r) => r.action === 'BUY') || null, [sorted])
 
-  if (error) return <p className="text-bear">{error}</p>
-  if (!rows) return <p className="text-muted-foreground">Carregant…</p>
+  if (error && !rows) return <ErrorState message={error} onRetry={load} />
+  if (!rows) return <PageSkeleton cards={0} rows={8} />
 
   const countdown = meta?.closesAt ? formatCountdown(meta.closesAt) : null
 
   return (
     <div>
-      <BidModal request={pendingAction} onClose={handleModalClose} />
+      <ActionModal request={pendingAction} onClose={handleModalClose} />
+      <BidDialog bid={pendingBid} onClose={() => setPendingBid(null)} />
 
       {myBids.length > 0 && (
         <div className="mb-5 rounded-2xl border border-primary/30 bg-primary/5 p-4">
@@ -451,10 +491,10 @@ export default function Market() {
                 <Link to={`/players/${row.player.id}`} className="min-w-0 flex-1 truncate text-sm font-medium hover:text-primary">
                   {row.player.name}
                 </Link>
-                <span className="num shrink-0 text-sm font-semibold text-primary">{formatMoneyM(row.myBid.money)}</span>
+                <span className="num shrink-0 text-sm font-semibold text-primary">{formatMoney(row.myBid.money)}</span>
                 <button
                   onClick={() => askCancelBid(row)}
-                  className="shrink-0 rounded-md border border-border px-2 py-1 text-xs font-semibold text-muted-foreground hover:border-bear hover:text-bear"
+                  className="min-h-9 shrink-0 rounded-md border border-border px-3 py-1 text-xs font-semibold text-muted-foreground hover:border-bear hover:text-bear"
                 >
                   Cancel·lar
                 </button>
@@ -482,7 +522,7 @@ export default function Market() {
       {top && (
         <div className="mt-5 flex flex-col gap-6 rounded-2xl border border-bull/30 bg-bull/5 p-6 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex-1">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-bull/15 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-bull">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-bull/15 px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-bull">
               <span className="h-1.5 w-1.5 rounded-full bg-bull" />
               Top oportunitat
             </span>
@@ -498,20 +538,19 @@ export default function Market() {
                 </span>
               ) : (
                 top.externalTrend?.pct7d != null && (
-                  <span
-                    className="rounded-md bg-bull/15 px-2 py-1 text-sm font-semibold text-bull"
-                    title="Font externa (futbolfantasy.com, no oficial) — encara no tenim prou historial propi"
-                  >
+                  <span className="rounded-md bg-bull/15 px-2 py-1 text-sm font-semibold text-bull">
                     {top.externalTrend.pct7d >= 0 ? '↗' : '↘'} {formatPercent(top.externalTrend.pct7d)} 7d*
                   </span>
                 )
               )}
-              <button
-                onClick={() => askBid(top, top.marketValue, 'al valor actual')}
-                className="rounded-md border border-border px-2 py-1 text-xs font-semibold text-muted-foreground hover:border-bull hover:text-bull"
-              >
-                Pujar al valor
-              </button>
+              {!top.myBid && (
+                <button
+                  onClick={() => askBid(top, 'value', { recommended: top.recommendedBid, max: top.maxBid })}
+                  className="min-h-9 rounded-md border border-border px-3 py-1 text-xs font-semibold text-muted-foreground hover:border-bull hover:text-bull"
+                >
+                  Pujar al valor
+                </button>
+              )}
             </div>
             {!top.trend.pctChange7d && top.externalTrend?.pct7d != null && (
               <p className="mt-1 text-xs text-muted-foreground">*Font externa, no oficial — futbolfantasy.com</p>
@@ -527,21 +566,21 @@ export default function Market() {
 
           <div className="grid grid-cols-2 gap-3 lg:w-72">
             <div className="rounded-xl bg-bull/10 p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-bull/80">Oferta recomanada</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-bull/80">Oferta recomanada</p>
               <p className="num mt-1 text-xl font-bold text-bull">{formatMoneyM(top.recommendedBid)}</p>
               <button
-                onClick={() => askBid(top, top.recommendedBid, 'recomanada')}
-                className="mt-2 w-full rounded-md bg-bull/20 py-1 text-xs font-semibold text-bull hover:bg-bull/30"
+                onClick={() => askBid(top, 'recommended', { recommended: top.recommendedBid, max: top.maxBid })}
+                className="mt-2 min-h-9 w-full rounded-md bg-bull/20 py-1 text-xs font-semibold text-bull hover:bg-bull/30"
               >
                 Pujar
               </button>
             </div>
             <div className="rounded-xl border border-border p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Màxim</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Màxim</p>
               <p className="num mt-1 text-xl font-bold">{formatMoneyM(top.maxBid)}</p>
               <button
-                onClick={() => askBid(top, top.maxBid, 'màxima')}
-                className="mt-2 w-full rounded-md border border-border py-1 text-xs font-semibold text-muted-foreground hover:border-bull hover:text-bull"
+                onClick={() => askBid(top, 'max', { recommended: top.recommendedBid, max: top.maxBid })}
+                className="mt-2 min-h-9 w-full rounded-md border border-border py-1 text-xs font-semibold text-muted-foreground hover:border-bull hover:text-bull"
               >
                 Pujar
               </button>
@@ -569,7 +608,7 @@ export default function Market() {
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Posició</p>
             <div className="flex gap-2">
               {POSITIONS.map((p) => (
-                <Pill key={p} active={position === p} onClick={() => setPosition(position === p ? null : p)}>
+                <Pill key={p} active={position === p} onClick={() => setFilter('position', position === p ? null : p)}>
                   {POSITION_LABELS[p]}
                 </Pill>
               ))}
@@ -586,20 +625,23 @@ export default function Market() {
               max={20}
               step={0.5}
               value={maxPriceM}
-              onChange={(e) => setMaxPriceM(Number(e.target.value))}
+              onChange={(e) => setFilter('maxPriceM', Number(e.target.value))}
               className="w-full accent-primary"
             />
           </div>
 
           <div className="min-w-40">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Fantasy Score · {minScore}+</p>
+            <p className="mb-2 flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Puntuació mínima · {minScore}+
+              <InfoTip>Nota de 0 a 100 que combina rendiment esportiu, tendència del valor i encaix a la teva plantilla.</InfoTip>
+            </p>
             <input
               type="range"
               min={0}
               max={100}
               step={5}
               value={minScore}
-              onChange={(e) => setMinScore(Number(e.target.value))}
+              onChange={(e) => setFilter('minScore', Number(e.target.value))}
               className="w-full accent-primary"
             />
           </div>
@@ -608,7 +650,7 @@ export default function Market() {
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Tendència</p>
             <div className="flex gap-2">
               {TREND_OPTIONS.map((o) => (
-                <Pill key={o.key} active={trend === o.key} onClick={() => setTrend(trend === o.key ? null : o.key)}>
+                <Pill key={o.key} active={trend === o.key} onClick={() => setFilter('trend', trend === o.key ? null : o.key)}>
                   {o.label}
                 </Pill>
               ))}
@@ -617,19 +659,27 @@ export default function Market() {
 
           <div>
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Propietari</p>
-            <Pill active={freeAgentOnly} onClick={() => setFreeAgentOnly((v) => !v)}>
+            <Pill active={freeAgentOnly} onClick={() => setFilter('freeAgentOnly', !freeAgentOnly)}>
               Només mercat lliure
             </Pill>
           </div>
         </div>
+        {filtersActive && (
+          <button onClick={clearFilters} className="mt-4 text-sm font-semibold text-primary hover:underline">
+            Treure filtres
+          </button>
+        )}
       </div>
 
       <div className="mt-4 hidden overflow-x-auto rounded-xl border border-border bg-surface md:block">
-        <table className="w-full min-w-220 text-sm">
+        <table className="w-full min-w-240 text-sm">
           <thead>
             <tr className="border-b border-border text-left text-xs uppercase text-muted-foreground">
               <th className="cursor-pointer select-none px-4 py-3 hover:text-foreground" onClick={() => toggleSort('change24h')}>
-                24H{sortArrow('change24h')}
+                <span className="inline-flex items-center gap-1">
+                  24H{sortArrow('change24h')}
+                  <InfoTip>Quant ha canviat el valor de mercat en les últimes 24 hores. «*ext.» vol dir que la dada és externa. {EXT_SOURCE_HELP}</InfoTip>
+                </span>
               </th>
               <th className="cursor-pointer select-none px-4 py-3 hover:text-foreground" onClick={() => toggleSort('player')}>
                 Jugador{sortArrow('player')}
@@ -649,26 +699,37 @@ export default function Market() {
               <th
                 className="cursor-pointer select-none px-4 py-3 hover:text-foreground"
                 onClick={() => toggleSort('externalPct7d')}
-                title="Font externa (futbolfantasy.com, no oficial)"
               >
-                7d ext.*{sortArrow('externalPct7d')}
+                <span className="inline-flex items-center gap-1">
+                  7d ext.*{sortArrow('externalPct7d')}
+                  <InfoTip>Variació del valor en 7 dies segons futbolfantasy.com (font externa, no oficial).</InfoTip>
+                </span>
               </th>
               <th className="cursor-pointer select-none px-4 py-3 hover:text-foreground" onClick={() => toggleSort('averagePoints')}>
                 Mitjana{sortArrow('averagePoints')}
               </th>
               <th className="cursor-pointer select-none px-4 py-3 hover:text-foreground" onClick={() => toggleSort('fantasyScore')}>
-                Score{sortArrow('fantasyScore')}
+                <span className="inline-flex items-center gap-1">
+                  Puntuació{sortArrow('fantasyScore')}
+                  <InfoTip>Nota de 0 a 100 que combina rendiment esportiu, tendència del valor i encaix a la teva plantilla.</InfoTip>
+                </span>
               </th>
               <th className="cursor-pointer select-none px-4 py-3 hover:text-foreground" onClick={() => toggleSort('recommendedBid')}>
-                Oferta{sortArrow('recommendedBid')}
+                <span className="inline-flex items-center gap-1">
+                  Oferta{sortArrow('recommendedBid')}
+                  <InfoTip>L'import que et recomanem pujar per tenir opcions de guanyar la subhasta sense pagar de més.</InfoTip>
+                </span>
               </th>
-              <th
-                className="cursor-pointer select-none px-4 py-3 hover:text-foreground"
-                onClick={() => toggleSort('buyEconomicScore')}
-                title="Anàlisi purament econòmica: si compro aquest jugador a aquest preu, és rentable? (desplega per veure el càlcul)"
-              >
-                Econòmic{sortArrow('buyEconomicScore')}
+              <th className="cursor-pointer select-none px-4 py-3 hover:text-foreground" onClick={() => toggleSort('buyEconomicScore')}>
+                <span className="inline-flex items-center gap-1">
+                  Econòmic{sortArrow('buyEconomicScore')}
+                  <InfoTip>
+                    Només mira els diners: si el compres a aquest preu, és probable que guanyis valor? No té en compte si juga o si el necessites. Obre la
+                    fletxa per veure el càlcul.
+                  </InfoTip>
+                </span>
               </th>
+              <th className="px-4 py-3 text-right">Acció</th>
             </tr>
           </thead>
           <tbody>
@@ -677,14 +738,31 @@ export default function Market() {
             ))}
           </tbody>
         </table>
-        {sorted.length === 0 && <p className="p-6 text-center text-sm text-muted-foreground">Cap jugador amb aquests filtres.</p>}
+        {sorted.length === 0 && (
+          <EmptyState
+            icon={SearchX}
+            className="m-4"
+            title="Cap jugador amb aquests filtres"
+            message="Prova d'ampliar el preu màxim o de treure algun filtre."
+            actionLabel={filtersActive ? 'Treure filtres' : undefined}
+            onAction={clearFilters}
+          />
+        )}
       </div>
 
       <div className="mt-4 space-y-3 md:hidden">
         {sorted.map((row) => (
           <MarketCard key={row.id} row={row} onBid={askBid} onCancelBid={askCancelBid} />
         ))}
-        {sorted.length === 0 && <p className="panel p-6 text-center text-sm text-muted-foreground">Cap jugador amb aquests filtres.</p>}
+        {sorted.length === 0 && (
+          <EmptyState
+            icon={SearchX}
+            title="Cap jugador amb aquests filtres"
+            message="Prova d'ampliar el preu màxim o de treure algun filtre."
+            actionLabel={filtersActive ? 'Treure filtres' : undefined}
+            onAction={clearFilters}
+          />
+        )}
       </div>
     </div>
   )

@@ -1,15 +1,26 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import apiClient from '../api/client'
+import { PageSkeleton, ErrorState } from '../components/PageState'
+import { DATA_CHANGED, useAppEvent } from '../lib/appEvents'
 
 export default function Standings() {
   const [data, setData] = useState(null)
+  const [error, setError] = useState('')
 
-  useEffect(() => {
-    apiClient.get('/standings').then((res) => setData(res.data))
-  }, [])
+  const load = () => {
+    setError('')
+    apiClient
+      .get('/standings')
+      .then((res) => setData(res.data))
+      .catch((err) => setError(err.response?.data?.message || "No s'ha pogut carregar la classificació."))
+  }
 
-  if (!data) return <p className="text-muted-foreground">Carregant…</p>
+  useEffect(load, [])
+  useAppEvent(DATA_CHANGED, load)
+
+  if (error && !data) return <ErrorState message={error} onRetry={load} />
+  if (!data) return <PageSkeleton cards={0} rows={8} />
 
   return (
     <div>

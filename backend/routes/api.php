@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\AlertController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ClauseController;
 use App\Http\Controllers\Api\ClausePurchaseOrderController;
@@ -37,6 +38,12 @@ Route::middleware(['auth:sanctum', 'bump.data'])->group(function () {
 
     // Dashboard — "What should I do today?"
     Route::get('/dashboard/header', [DashboardController::class, 'header']);
+    Route::get('/dashboard/since', [DashboardController::class, 'since']);
+
+    // In-app notifications (header bell)
+    Route::get('/alerts', [AlertController::class, 'index']);
+    Route::post('/alerts/read-all', [AlertController::class, 'readAll']);
+    Route::post('/alerts/{alert}/read', [AlertController::class, 'read']);
     Route::get('/dashboard/today',[DashboardController::class, 'today'])->middleware('cache.api');
 
     // Team

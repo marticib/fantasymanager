@@ -4,6 +4,8 @@ import apiClient from '../api/client'
 import Sparkline from '../components/Sparkline'
 import { TrendingUpIcon, WalletIcon, ChevronDownIcon } from '../components/Icons'
 import { formatMoneyM, formatPercent, POSITION_LABELS, initials, ACTION_LABELS } from '../utils/format'
+import { PageSkeleton, ErrorState } from '../components/PageState'
+import InfoTip from '../components/InfoTip'
 
 // Rival players are only ever analyzable through their clause (never
 // HOLD/SELL — that's an owner-only decision) — same 4-tier scale
@@ -25,7 +27,7 @@ function ScoreStat({ label, value, colorClass }) {
   return (
     <div className="text-center">
       <p className={`text-lg font-bold ${colorClass}`}>{value}</p>
-      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</p>
     </div>
   )
 }
@@ -40,7 +42,7 @@ function PlayerRow({ p }) {
       <tr className="border-b border-border last:border-0 hover:bg-surface-raised">
         <td className="px-4 py-3">
           <Link to={`/players/${p.id}`} className="flex items-center gap-2.5 hover:text-primary">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted-foreground/15 text-[10px] font-bold text-muted-foreground">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted-foreground/15 text-[11px] font-bold text-muted-foreground">
               {p.imageUrl ? <img src={p.imageUrl} alt="" className="h-full w-full object-cover" /> : initials(p.name)}
             </div>
             <div className="min-w-0">
@@ -65,7 +67,7 @@ function PlayerRow({ p }) {
           }
         >
           <Sparkline data={p.history} />
-          {p.historySource === 'external' && <span className="text-[9px] text-muted-foreground">*ext.</span>}
+          {p.historySource === 'external' && <span className="text-[11px] text-muted-foreground">*ext.</span>}
         </td>
         <td className={`px-4 py-3 ${p.externalTrend?.pct7d > 0 ? 'text-bull' : p.externalTrend?.pct7d < 0 ? 'text-bear' : 'text-muted-foreground'}`}>
           {p.externalTrend?.pct7d != null
@@ -85,7 +87,7 @@ function PlayerRow({ p }) {
                 <span className={`inline-flex rounded-md px-2 py-1 text-xs font-bold ${ACTION_BADGE[d.action]}`}>
                   {ACTION_LABELS[d.action] || d.action}
                 </span>
-                {d.confidence != null && <p className="mt-1 text-[10px] text-muted-foreground">Confiança {d.confidence}%</p>}
+                {d.confidence != null && <p className="mt-1 text-[11px] text-muted-foreground">Confiança {d.confidence}%</p>}
               </div>
               <button
                 onClick={() => setOpen((o) => !o)}
@@ -112,7 +114,7 @@ function PlayerRow({ p }) {
                 </p>
                 <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
                   <span>
-                    Prima: <span className="font-semibold text-foreground">{formatPercent(raw.clausePremiumPct * 100)}</span>
+                    Sobrecost: <span className="font-semibold text-foreground">{formatPercent(raw.clausePremiumPct * 100)}</span>
                   </span>
                   <span>
                     Break-even: <span className="font-semibold text-foreground">{raw.breakEvenDays != null ? `${raw.breakEvenDays} dies` : '—'}</span>
@@ -126,7 +128,7 @@ function PlayerRow({ p }) {
               </div>
               <div className="flex shrink-0 gap-5 border-t border-border pt-3 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-5">
                 <ScoreStat label="Score clàusula" value={d.mainScore} colorClass="text-info" />
-                <ScoreStat label="ROI 14d" value={formatPercent(raw.roi14d * 100)} colorClass="text-primary" />
+                <ScoreStat label="Rendiment 14d" value={formatPercent(raw.roi14d * 100)} colorClass="text-primary" />
               </div>
             </div>
           </td>
@@ -187,7 +189,7 @@ function PlayerCard({ p }) {
         <div className="mt-3 border-t border-border pt-3">
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
             <span>
-              Prima: <span className="font-semibold text-foreground">{formatPercent(raw.clausePremiumPct * 100)}</span>
+              Sobrecost: <span className="font-semibold text-foreground">{formatPercent(raw.clausePremiumPct * 100)}</span>
             </span>
             <span>
               Break-even: <span className="font-semibold text-foreground">{raw.breakEvenDays != null ? `${raw.breakEvenDays} dies` : '—'}</span>
@@ -200,7 +202,7 @@ function PlayerCard({ p }) {
           </div>
           <div className="mt-3 flex gap-5">
             <ScoreStat label="Score clàusula" value={d.mainScore} colorClass="text-info" />
-            <ScoreStat label="ROI 14d" value={formatPercent(raw.roi14d * 100)} colorClass="text-primary" />
+            <ScoreStat label="Rendiment 14d" value={formatPercent(raw.roi14d * 100)} colorClass="text-primary" />
           </div>
         </div>
       )}
@@ -235,8 +237,8 @@ export default function RivalTeam() {
       .catch((err) => setError(err.response?.data?.message || "No s'ha pogut carregar aquest equip."))
   }, [teamId])
 
-  if (error) return <p className="text-bear">{error}</p>
-  if (!team) return <p className="text-muted-foreground">Carregant…</p>
+  if (error) return <ErrorState message={error} />
+  if (!team) return <PageSkeleton cards={3} rows={8} />
 
   return (
     <div>
@@ -274,11 +276,13 @@ export default function RivalTeam() {
               <th className="px-4 py-3">Valor</th>
               <th className="px-4 py-3">Clàusula</th>
               <th className="px-4 py-3">7D</th>
-              <th className="px-4 py-3" title="Font externa (futbolfantasy.com, no oficial)">
-                7D ext.*
+              <th className="px-4 py-3">
+                <span className="inline-flex items-center gap-1">
+                  7D ext.* <InfoTip>Variació del valor en 7 dies segons futbolfantasy.com (font externa, no oficial).</InfoTip>
+                </span>
               </th>
               <th className="px-4 py-3">Mitjana</th>
-              <th className="px-4 py-3">Score</th>
+              <th className="px-4 py-3">Puntuació</th>
               <th className="px-4 py-3">
                 Clàusula <span className="normal-case text-muted-foreground">(desplega per veure el càlcul)</span>
               </th>

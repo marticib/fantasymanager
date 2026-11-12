@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { SESSION_EXPIRED, emitAppEvent } from '../lib/appEvents'
 
 const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
 
@@ -23,6 +24,11 @@ apiClient.interceptors.response.use(
       if (!window.location.pathname.startsWith('/login')) {
         window.location.assign('/login')
       }
+    }
+    // The LaLiga session (not the app login) expired: the shell shows one
+    // "reconnect" banner instead of every screen failing on its own.
+    if (error.response?.status === 409 && error.response?.data?.code === 'LALIGA_SESSION_EXPIRED') {
+      emitAppEvent(SESSION_EXPIRED)
     }
     return Promise.reject(error)
   },

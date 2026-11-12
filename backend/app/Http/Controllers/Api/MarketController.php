@@ -32,7 +32,7 @@ class MarketController extends Controller
         $league = $account->activeLeague;
 
         if (! $league) {
-            return response()->json(['message' => 'No active league selected yet.'], 404);
+            return response()->json(['message' => 'Encara no has triat cap lliga. Tria-la a la configuració inicial.'], 404);
         }
 
         $rules = $settings->rules($account);
@@ -194,7 +194,7 @@ class MarketController extends Controller
         $league = $account->activeLeague;
 
         if (! $league) {
-            return response()->json(['message' => 'No active league selected yet.'], 404);
+            return response()->json(['message' => 'Encara no has triat cap lliga. Tria-la a la configuració inicial.'], 404);
         }
 
         $listing = FantasyMarketPlayer::with('player')
@@ -203,7 +203,7 @@ class MarketController extends Controller
             ->first();
 
         if (! $listing || ! $listing->player) {
-            return response()->json(['message' => 'Listing not found.'], 404);
+            return response()->json(['message' => 'Aquest jugador ja no és al mercat.'], 404);
         }
 
         $marketValue = (float) ($listing->market_value ?? 0);
@@ -245,7 +245,7 @@ class MarketController extends Controller
         $league = $account->activeLeague;
 
         if (! $team || ! $league || $marketPlayer->fantasy_league_id !== $league->id) {
-            return response()->json(['message' => 'Listing not found.'], 404);
+            return response()->json(['message' => 'Aquest jugador ja no és al mercat.'], 404);
         }
 
         if ($marketPlayer->seller_team_id === $team->id) {
@@ -257,7 +257,7 @@ class MarketController extends Controller
         $marketId = data_get($marketPlayer->raw_payload, 'id');
 
         if (! $marketId) {
-            return response()->json(['message' => 'Missing market listing id — try syncing the market first.'], 422);
+            return response()->json(['message' => 'Falten dades d\'aquest anunci. Sincronitza i torna-ho a provar.'], 422);
         }
 
         $availableMoney = $teamService->getMoney($account, $team->external_id);
@@ -307,7 +307,7 @@ class MarketController extends Controller
         $league = $account->activeLeague;
 
         if (! $league || $marketPlayer->fantasy_league_id !== $league->id) {
-            return response()->json(['message' => 'Listing not found.'], 404);
+            return response()->json(['message' => 'Aquest jugador ja no és al mercat.'], 404);
         }
 
         $marketId = data_get($marketPlayer->raw_payload, 'id');

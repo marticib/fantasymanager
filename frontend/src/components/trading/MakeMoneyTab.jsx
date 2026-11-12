@@ -48,7 +48,7 @@ function Movement({ move, horizon }) {
         {isSell ? (
           <Metric label={`Vendre vs mantenir ${horizon}D`} value={formatDelta(move.sellImpact)} tone={toneFor(move.sellImpact)} />
         ) : (
-          <Metric label={`Benefici ${horizon}D`} value={formatDelta(move.gain)} tone={toneFor(move.gain)} sub={move.roi !== null ? `ROI ${formatPercent(move.roi * 100)}` : null} />
+          <Metric label={`Benefici ${horizon}D`} value={formatDelta(move.gain)} tone={toneFor(move.gain)} sub={move.roi !== null ? `Rendiment ${formatPercent(move.roi * 100)}` : null} />
         )}
       </div>
 
@@ -101,7 +101,7 @@ export default function MakeMoneyTab({ horizon, onMeta }) {
                   tone={toneFor(data.summary.expectedProfit)}
                   sub={data.summary.sellImpact !== null ? `Vendes: ${formatDelta(data.summary.sellImpact)}` : null}
                 />
-                <StatCard label="ROI" value={data.summary.roi === null ? '—' : formatPercent(data.summary.roi * 100)} tone={toneFor(data.summary.roi)} sub="Sobre el capital invertit" />
+                <StatCard label="Rendiment" value={data.summary.roi === null ? '—' : formatPercent(data.summary.roi * 100)} tone={toneFor(data.summary.roi)} sub="Sobre el capital invertit" />
                 <StatCard label="Confiança" value={data.summary.confidence === null ? '—' : `${data.summary.confidence}/100`} />
               </div>
 

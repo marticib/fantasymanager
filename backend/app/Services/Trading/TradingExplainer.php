@@ -16,7 +16,7 @@ final class TradingExplainer
         'INSUFFICIENT_FF_DATA' => 'Dades de FútbolFantasy insuficients',
         'SUSPECT_VALUE_MISMATCH' => 'El valor de FútbolFantasy no quadra amb el de LaLiga (coincidència sospitosa)',
         'NO_PRICE' => 'Sense preu fiable',
-        'DO_NOT_CHASE' => 'No perseguir: la puja guanyadora estimada supera la MaxBid',
+        'DO_NOT_CHASE' => 'No val la pena pujar més: la puja guanyadora estimada supera el màxim que surt a compte',
         'MAX_BID_TOO_LOW' => 'La MaxBid és inferior al que demana la subhasta',
         'CLAUSE_LOCKED' => 'Clàusula encara bloquejada',
         'CLAUSE_SHIELDED' => 'Clàusula blindada',

@@ -4,6 +4,7 @@ namespace Tests\Unit\Services\Automation;
 
 use App\Jobs\ProcessClauseOrderJob;
 use App\Models\FantasyAccount;
+use App\Models\FantasyAlert;
 use App\Models\FantasyClausePurchaseOrder;
 use App\Models\FantasyLeague;
 use App\Models\FantasyPlayer;
@@ -281,6 +282,10 @@ class ClausePurchaseOrderServiceTest extends TestCase
         $fresh = $order->fresh();
         $this->assertSame(FantasyClausePurchaseOrder::STATUS_NEEDS_CONFIRMATION, $fresh->status);
         $this->assertSame(14_000_000, $fresh->pending_confirmation_clause_value);
+
+        $alert = FantasyAlert::where('type', FantasyAlert::TYPE_CLAUSE_ORDER)->sole();
+        $this->assertStringContainsString('ha pujat', $alert->title);
+        $this->assertStringContainsString('14.000.000 €', $alert->message);
     }
 
     public function test_confirm_and_execute_pays_the_confirmed_higher_price(): void
@@ -308,6 +313,7 @@ class ClausePurchaseOrderServiceTest extends TestCase
         $fresh = $order->fresh();
         $this->assertSame(FantasyClausePurchaseOrder::STATUS_EXECUTED, $fresh->status);
         $this->assertSame(14_000_000, $fresh->executed_clause_value);
+        $this->assertSame(1, FantasyAlert::where('type', FantasyAlert::TYPE_CLAUSE_ORDER)->where('title', 'like', 'Has fitxat%')->count());
     }
 
     /** "Donar l'ordre de pagar" (confirming) must also check live cash first, same as the automatic path. */

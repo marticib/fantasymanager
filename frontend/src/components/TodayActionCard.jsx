@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { formatMoneyM, formatPercent, formatDelta, formatCountdown, initials } from '../utils/format'
 import { ArrowRightIcon, SignalIcon } from './Icons'
+import InfoTip from './InfoTip'
 
 const TYPE_META = {
   RAISE_CLAUSE_NOW: { label: 'PUJAR CLÀUSULA AVUI', color: 'clause', cta: 'Veure detall' },
@@ -8,7 +9,7 @@ const TYPE_META = {
   ACCEPT_OFFER: { label: 'ACCEPTAR OFERTA', color: 'buy', cta: 'Veure oferta' },
   SELL: { label: 'VENDRE', color: 'sell', cta: 'Veure anàlisi' },
   BUY: { label: 'OPORTUNITAT DE COMPRA', color: 'buy', cta: 'Veure detall' },
-  DO_NOT_CHASE: { label: 'NO PERSEGUIR', color: 'hold', cta: 'Veure detall' },
+  DO_NOT_CHASE: { label: 'NO VAL LA PENA PUJAR MÉS', color: 'hold', cta: 'Veure detall' },
   PAY_CLAUSE: { label: 'PAGAR CLÀUSULA', color: 'clause', cta: 'Veure detall' },
 }
 
@@ -33,17 +34,20 @@ const BG_CLASS = {
   hold: 'bg-muted-foreground/10 text-muted-foreground',
 }
 
-function Stat({ label, value, accent, hint, onBid, busy }) {
+function Stat({ label, value, accent, hint, info, onBid, busy }) {
   return (
     <div className={accent ? `rounded-xl p-3 ${BG_CLASS[accent]}` : 'rounded-xl border border-border p-3'}>
-      <p className="text-[11px] font-semibold uppercase tracking-wide opacity-80">{label}</p>
+      <p className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide opacity-80">
+        {label}
+        {info && <InfoTip>{info}</InfoTip>}
+      </p>
       <p className="mt-1 text-lg font-bold">{value}</p>
-      {hint && <p className="mt-0.5 text-[10px] opacity-70">{hint}</p>}
+      {hint && <p className="mt-0.5 text-[11px] opacity-70">{hint}</p>}
       {onBid && (
         <button
           onClick={onBid}
           disabled={busy}
-          className="mt-1.5 w-full rounded-md border border-current/30 py-1 text-[11px] font-semibold opacity-90 hover:opacity-100 disabled:opacity-50"
+          className="mt-1.5 min-h-9 w-full rounded-md border border-current/30 py-1 text-xs font-semibold opacity-90 hover:opacity-100 disabled:opacity-50"
         >
           Pujar
         </button>
@@ -52,7 +56,7 @@ function Stat({ label, value, accent, hint, onBid, busy }) {
   )
 }
 
-export default function TodayActionCard({ action, onBid, busy }) {
+export default function TodayActionCard({ action, onBid, busy, onDismiss }) {
   const meta = TYPE_META[action.type] || { label: action.title || 'ACCIÓ', color: 'hold', cta: 'Veure detall' }
   const color = action.type === 'ACCEPT_OFFER' && action.recommendation !== 'TRADE_PROFIT' ? meta.color : meta.color
   const player = action.player
@@ -62,7 +66,7 @@ export default function TodayActionCard({ action, onBid, busy }) {
   return (
     <div className={`flex flex-col rounded-2xl border bg-surface p-6 ${BORDER_CLASS[color]}`}>
       <div className="flex items-center justify-between gap-2">
-        <span className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${BG_CLASS[color]}`}>
+        <span className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold uppercase tracking-wide ${BG_CLASS[color]}`}>
           <span className={`h-1.5 w-1.5 rounded-full bg-current`} />
           {action.category === 'urgent' ? 'Prioritat màxima' : 'Oportunitat'}
         </span>
@@ -90,7 +94,7 @@ export default function TodayActionCard({ action, onBid, busy }) {
           {action.mainScore != null && (
             <div className="shrink-0 text-right">
               <p className="text-lg font-bold">{Math.round(action.mainScore)}</p>
-              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Score</p>
+              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Puntuació</p>
             </div>
           )}
         </div>
@@ -138,24 +142,28 @@ export default function TodayActionCard({ action, onBid, busy }) {
             <Stat
               label="Valor"
               value={formatMoneyM(action.currentValue)}
-              onBid={onBid && action.marketPlayerId && (() => onBid(action, action.currentValue, 'al valor actual'))}
+              onBid={onBid && action.marketPlayerId && (() => onBid(action, 'value'))}
               busy={busy}
             />
             <Stat
               label="Oferta recomanada"
               value={formatMoneyM(action.recommendedBid)}
               accent="bull"
-              onBid={onBid && action.marketPlayerId && (() => onBid(action, action.recommendedBid, 'recomanada'))}
+              onBid={onBid && action.marketPlayerId && (() => onBid(action, 'recommended'))}
               busy={busy}
             />
             <Stat
               label="Màxim"
               value={formatMoneyM(action.maxBid)}
-              onBid={onBid && action.marketPlayerId && (() => onBid(action, action.maxBid, 'màxima'))}
+              onBid={onBid && action.marketPlayerId && (() => onBid(action, 'max'))}
               busy={busy}
             />
             {action.metadata?.expectedROI14d != null && (
-              <Stat label="ROI 14d" value={formatPercent(action.metadata.expectedROI14d * 100)} />
+              <Stat
+                label="Rendiment 14 dies"
+                value={formatPercent(action.metadata.expectedROI14d * 100)}
+                info="Quant esperem que guanyi (o perdi) de valor aquest jugador en 14 dies respecte del que pagaries."
+              />
             )}
           </div>
         )}
@@ -174,18 +182,40 @@ export default function TodayActionCard({ action, onBid, busy }) {
             <Stat label="Clàusula" value={formatMoneyM(action.amount)} accent="info" />
             <Stat label="Valor" value={formatMoneyM(action.currentValue)} />
             {action.metadata?.ownerTeamName && <Stat label="Propietari" value={action.metadata.ownerTeamName} />}
-            {action.metadata?.roi14d != null && <Stat label="ROI 14d" value={formatPercent(action.metadata.roi14d * 100)} />}
+            {action.metadata?.roi14d != null && (
+              <Stat
+                label="Rendiment 14 dies"
+                value={formatPercent(action.metadata.roi14d * 100)}
+                info="Quant esperem que guanyi (o perdi) de valor aquest jugador en 14 dies respecte del que pagaries."
+              />
+            )}
           </div>
         )}
       </div>
 
       <Link
         to={player ? `/players/${player.id}` : '#'}
-        className={`mt-5 flex items-center justify-center gap-1.5 rounded-lg py-2 text-sm font-semibold ${BG_CLASS[color]} hover:opacity-80`}
+        className={`mt-5 flex min-h-11 items-center justify-center gap-1.5 rounded-lg py-2 text-sm font-semibold ${BG_CLASS[color]} hover:opacity-80`}
       >
         {meta.cta}
         <ArrowRightIcon className="h-4 w-4" />
       </Link>
+      {onDismiss && (
+        <div className="mt-2 flex gap-2">
+          <button
+            onClick={() => onDismiss('done')}
+            className="min-h-10 flex-1 rounded-lg border border-border text-xs font-semibold text-muted-foreground hover:border-bull/50 hover:text-bull"
+          >
+            ✓ Fet
+          </button>
+          <button
+            onClick={() => onDismiss('ignored')}
+            className="min-h-10 flex-1 rounded-lg border border-border text-xs font-semibold text-muted-foreground hover:text-foreground"
+          >
+            Ignorar per avui
+          </button>
+        </div>
+      )}
     </div>
   )
 }

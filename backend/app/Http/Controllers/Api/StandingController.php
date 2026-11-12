@@ -14,7 +14,7 @@ class StandingController extends Controller
         $league = $account->activeLeague;
 
         if (! $league) {
-            return response()->json(['data' => [], 'message' => 'No active league selected yet.']);
+            return response()->json(['data' => [], 'message' => 'Encara no has triat cap lliga. Tria-la a la configuració inicial.']);
         }
 
         $latestCapturedAt = FantasyStanding::where('fantasy_league_id', $league->id)->max('captured_at');

@@ -3,6 +3,11 @@ import { Link } from 'react-router-dom'
 import { cachedGet } from '../api/cachedGet'
 import Sparkline from '../components/Sparkline'
 import { SearchIcon } from '../components/Icons'
+import InfoTip from '../components/InfoTip'
+import { BlockSkeleton, EmptyState, ErrorState } from '../components/PageState'
+import { SearchX } from 'lucide-react'
+import { usePersistentState } from '../lib/storage'
+import { DATA_CHANGED, useAppEvent } from '../lib/appEvents'
 import { formatMoneyM, formatDelta, POSITION_LABELS, PLAYER_TYPE_LABEL, classifyPlayerType, initials } from '../utils/format'
 
 const POSITIONS = ['GK', 'DF', 'MF', 'FW']
@@ -92,19 +97,38 @@ export default function Players() {
   const [players, setPlayers] = useState(null)
   const [total, setTotal] = useState(null)
   const [error, setError] = useState('')
-  const [position, setPosition] = useState('')
+  const [position, setPosition] = usePersistentState('players-position', '')
   const [search, setSearch] = useState('')
-  const [sort, setSort] = useState({ key: 'fantasyScore', direction: 'desc' })
+  const [sort, setSort] = usePersistentState('players-sort', { key: 'fantasyScore', direction: 'desc' })
+  const [reloadKey, setReloadKey] = useState(0)
+  const reload = () => setReloadKey((k) => k + 1)
+  useAppEvent(DATA_CHANGED, reload)
 
   useEffect(() => {
     const handle = setTimeout(() => {
+      setError('')
       cachedGet('/players', { position: position || undefined, search: search || undefined, per_page: 60 }, (d) => {
         setPlayers(d.data)
         setTotal(d.total ?? d.data.length)
-      }).catch((err) => setError(err.response?.data?.message || 'Error carregant els jugadors.'))
+      }).catch((err) => setError(err.response?.data?.message || "No s'han pogut carregar els jugadors."))
     }, 250)
     return () => clearTimeout(handle)
-  }, [position, search])
+  }, [position, search, reloadKey])
+
+  const clearFilters = () => {
+    setSearch('')
+    setPosition('')
+  }
+  const emptyState = (className) => (
+    <EmptyState
+      icon={SearchX}
+      className={className}
+      title="Cap jugador trobat"
+      message="Revisa com has escrit el nom o tria «Totes les posicions»."
+      actionLabel={search || position ? 'Treure filtres' : undefined}
+      onAction={clearFilters}
+    />
+  )
 
   const sorted = useMemo(() => {
     if (!players) return []
@@ -126,7 +150,7 @@ export default function Players() {
 
   const sortArrow = (key) => (sort.key === key ? (sort.direction === 'desc' ? ' ↓' : ' ↑') : '')
 
-  if (error) return <p className="text-bear">{error}</p>
+  if (error && !players) return <ErrorState message={error} onRetry={reload} />
 
   return (
     <div>
@@ -144,7 +168,8 @@ export default function Players() {
         <select
           value={position}
           onChange={(e) => setPosition(e.target.value)}
-          className="shrink-0 rounded-lg border border-border bg-background px-2 py-1.5 text-sm"
+          className="min-h-10 shrink-0 rounded-lg border border-border bg-background px-2 py-1.5 text-sm"
+          aria-label="Posició"
         >
           <option value="">Totes les posicions</option>
           {POSITIONS.map((p) => (
@@ -166,7 +191,12 @@ export default function Players() {
                 Pos.{sortArrow('position')}
               </th>
               <th className="cursor-pointer select-none px-4 py-3 hover:text-foreground" onClick={() => toggleSort('type')}>
-                Tipus{sortArrow('type')}
+                <span className="inline-flex items-center gap-1">
+                  Tipus{sortArrow('type')}
+                  <InfoTip>
+                    Esportiu: rendeix bé al camp. Trading: el seu valor puja però no puntua gaire (bo per comprar i vendre). Híbrid: les dues coses.
+                  </InfoTip>
+                </span>
               </th>
               <th className="cursor-pointer select-none px-4 py-3 hover:text-foreground" onClick={() => toggleSort('marketValue')}>
                 Valor{sortArrow('marketValue')}
@@ -182,7 +212,10 @@ export default function Players() {
                 Clàusula{sortArrow('clauseValue')}
               </th>
               <th className="cursor-pointer select-none px-4 py-3 hover:text-foreground" onClick={() => toggleSort('fantasyScore')}>
-                Score{sortArrow('fantasyScore')}
+                <span className="inline-flex items-center gap-1">
+                  Puntuació{sortArrow('fantasyScore')}
+                  <InfoTip>Nota de 0 a 100 que combina rendiment esportiu, tendència del valor i encaix a la teva plantilla.</InfoTip>
+                </span>
               </th>
             </tr>
           </thead>
@@ -194,7 +227,7 @@ export default function Players() {
                 <tr key={p.id} className="border-b border-border last:border-0 hover:bg-surface-raised">
                   <td className="px-4 py-3">
                     <Link to={`/players/${p.id}`} className="flex items-center gap-2.5 hover:text-primary">
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted-foreground/15 text-[10px] font-bold text-muted-foreground">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted-foreground/15 text-[11px] font-bold text-muted-foreground">
                         {p.imageUrl ? <img src={p.imageUrl} alt="" className="h-full w-full object-cover" /> : initials(p.name)}
                       </div>
                       <div className="min-w-0">
@@ -238,16 +271,20 @@ export default function Players() {
             })}
           </tbody>
         </table>
-        {sorted.length === 0 && players && <p className="p-6 text-center text-sm text-muted-foreground">Cap jugador trobat.</p>}
-        {!players && <p className="p-6 text-center text-sm text-muted-foreground">Carregant…</p>}
+        {sorted.length === 0 && players && emptyState('m-4')}
+        {!players && <BlockSkeleton rows={6} />}
       </div>
 
       <div className="mt-4 space-y-3 md:hidden">
         {sorted.map((p) => (
           <PlayerCard key={p.id} p={p} />
         ))}
-        {sorted.length === 0 && players && <p className="panel p-6 text-center text-sm text-muted-foreground">Cap jugador trobat.</p>}
-        {!players && <p className="panel p-6 text-center text-sm text-muted-foreground">Carregant…</p>}
+        {sorted.length === 0 && players && emptyState()}
+        {!players && (
+          <div className="panel">
+            <BlockSkeleton rows={6} />
+          </div>
+        )}
       </div>
     </div>
   )

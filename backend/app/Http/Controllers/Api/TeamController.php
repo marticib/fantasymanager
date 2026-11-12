@@ -34,7 +34,7 @@ class TeamController extends Controller
         $team = $account->activeTeam;
 
         if (! $team) {
-            return response()->json(['message' => 'No active team selected yet. Select a league first.'], 404);
+            return response()->json(['message' => 'Encara no tens cap equip seleccionat. Tria una lliga primer.'], 404);
         }
 
         $rules = $settings->rules($account);
@@ -173,7 +173,7 @@ class TeamController extends Controller
         $team = $account->activeTeam;
 
         if (! $team) {
-            return response()->json(['message' => 'No active team selected yet. Select a league first.'], 404);
+            return response()->json(['message' => 'Encara no tens cap equip seleccionat. Tria una lliga primer.'], 404);
         }
 
         $players = $team->players()->get();
@@ -222,7 +222,7 @@ class TeamController extends Controller
         $league = $account->activeLeague;
 
         if (! $team || ! $league) {
-            return response()->json(['message' => 'No active team selected yet. Select a league first.'], 404);
+            return response()->json(['message' => 'Encara no tens cap equip seleccionat. Tria una lliga primer.'], 404);
         }
 
         $purchasePrices = $team->teamPlayers()->pluck('purchase_price', 'fantasy_player_id');
@@ -318,7 +318,7 @@ class TeamController extends Controller
         $team = $account->activeTeam;
 
         if (! $team) {
-            return response()->json(['message' => 'No active team selected yet. Select a league first.'], 404);
+            return response()->json(['message' => 'Encara no tens cap equip seleccionat. Tria una lliga primer.'], 404);
         }
 
         $enabled = (bool) $request->validate(['enabled' => ['required', 'boolean']])['enabled'];
@@ -407,13 +407,13 @@ class TeamController extends Controller
         $league = $account->activeLeague;
 
         if (! $team || ! $league || $marketPlayer->fantasy_league_id !== $league->id || $marketPlayer->seller_team_id !== $team->id) {
-            return [null, null, null, response()->json(['message' => 'Listing not found.'], 404)];
+            return [null, null, null, response()->json(['message' => 'Aquest jugador ja no és al mercat.'], 404)];
         }
 
         $marketId = data_get($marketPlayer->raw_payload, 'id');
 
         if (! $marketId) {
-            return [null, null, null, response()->json(['message' => 'Missing market listing id.'], 422)];
+            return [null, null, null, response()->json(['message' => 'Falten dades d\'aquest anunci. Sincronitza i torna-ho a provar.'], 422)];
         }
 
         return [$account, $league, $marketId, null];

@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\BumpDataVersion;
 use App\Http\Middleware\CacheApiResponse;
+use App\Services\FantasyApi\Exceptions\FantasyApiAuthenticationException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -28,4 +29,13 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*') || $request->expectsJson(),
         );
+
+        // Not 401: that status means "your app login expired" to the frontend
+        // and logs the user out. This is the LaLiga session, a different thing.
+        $exceptions->render(fn (FantasyApiAuthenticationException $e, Request $request) => $request->is('api/*')
+            ? response()->json([
+                'code' => 'LALIGA_SESSION_EXPIRED',
+                'message' => 'La sessió de LaLiga ha caducat. Torna a connectar el compte a Configuració.',
+            ], 409)
+            : null);
     })->create();

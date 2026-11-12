@@ -40,7 +40,7 @@ class HistoryController extends Controller
         $team = $account->activeTeam;
 
         if (! $team) {
-            return response()->json(['data' => [], 'summary' => null, 'message' => 'No active team selected yet.']);
+            return response()->json(['data' => [], 'summary' => null, 'message' => 'Encara no tens cap equip seleccionat. Tria una lliga primer.']);
         }
 
         $range = $request->query('range', '30d');
@@ -281,7 +281,7 @@ class HistoryController extends Controller
         $account = $this->currentAccount($request);
 
         if ($decision->fantasy_account_id !== $account->id) {
-            return response()->json(['message' => 'Not found.'], 404);
+            return response()->json(['message' => 'No s\'ha trobat.'], 404);
         }
 
         $decision->load('player:id,name,club_name,position,image_url');

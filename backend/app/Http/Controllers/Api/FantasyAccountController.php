@@ -85,7 +85,7 @@ class FantasyAccountController extends Controller
             'token_expires_at' => null,
         ])->save();
 
-        return response()->json(['message' => 'LaLiga Fantasy session cleared.']);
+        return response()->json(['message' => 'Compte de LaLiga desconnectat.']);
     }
 
     /**
@@ -99,11 +99,11 @@ class FantasyAccountController extends Controller
             $account->forceFill(['fantasy_user_id' => $me->id, 'nickname' => $me->username])->save();
         } catch (FantasyApiException $e) {
             return response()->json([
-                'message' => 'Tokens saved, but calling LaLiga Fantasy failed — double check they are valid.',
+                'message' => 'Tokens desats, però LaLiga no els accepta. Comprova que siguin vàlids.',
                 'error' => $e->getMessage(),
             ], 422);
         }
 
-        return response()->json(['message' => 'Tokens saved.', 'nickname' => $account->nickname]);
+        return response()->json(['message' => 'Compte connectat.', 'nickname' => $account->nickname]);
     }
 }

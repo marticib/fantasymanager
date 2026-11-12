@@ -4,12 +4,15 @@ namespace App\Services\Automation;
 
 use App\Jobs\ProcessClauseOrderJob;
 use App\Models\FantasyAccount;
+use App\Models\FantasyAlert;
 use App\Models\FantasyClausePurchaseOrder;
 use App\Models\FantasyPlayer;
 use App\Models\FantasyTeamPlayer;
 use App\Services\FantasyApi\Exceptions\FantasyApiException;
 use App\Services\FantasyApi\FantasyClauseService;
 use App\Services\FantasyApi\FantasyTeamService;
+use App\Services\Notifications\AlertService;
+use App\Support\DataVersion;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
@@ -46,6 +49,7 @@ class ClausePurchaseOrderService
     public function __construct(
         private readonly FantasyTeamService $teamService,
         private readonly FantasyClauseService $clauseService,
+        private readonly AlertService $alerts,
     ) {}
 
     public function createOrder(FantasyAccount $account, FantasyPlayer $player): FantasyClausePurchaseOrder
@@ -163,6 +167,7 @@ class ClausePurchaseOrderService
 
         if (! $account || ! $league || ! $targetTeam) {
             $order->update(['status' => FantasyClausePurchaseOrder::STATUS_FAILED, 'error_message' => 'Account, league or target team no longer exists.']);
+            $this->notifyOrder($order);
 
             return;
         }
@@ -172,6 +177,7 @@ class ClausePurchaseOrderService
 
         if (! $entry) {
             $order->update(['status' => FantasyClausePurchaseOrder::STATUS_FAILED, 'error_message' => 'El jugador ja no pertany a aquest equip.']);
+            $this->notifyOrder($order);
 
             return;
         }
@@ -189,6 +195,7 @@ class ClausePurchaseOrderService
                 'status' => FantasyClausePurchaseOrder::STATUS_NEEDS_CONFIRMATION,
                 'pending_confirmation_clause_value' => $currentClauseValue,
             ]);
+            $this->notifyOrder($order);
 
             return;
         }
@@ -201,6 +208,7 @@ class ClausePurchaseOrderService
 
         if ($currentClauseValue <= 0) {
             $order->update(['status' => FantasyClausePurchaseOrder::STATUS_FAILED, 'error_message' => 'Current clause value unavailable.']);
+            $this->notifyOrder($order);
 
             return;
         }
@@ -252,6 +260,10 @@ class ClausePurchaseOrderService
             'executed_clause_value' => $clauseValue,
             'executed_at' => now(),
         ]);
+
+        // The roster just changed — cached screens must not keep showing the old one.
+        DataVersion::bumpAccount($account->id);
+        $this->notifyOrder($order);
     }
 
     /**
@@ -326,6 +338,7 @@ class ClausePurchaseOrderService
         // config/logging.php — this is defense in depth on top of that,
         // not a substitute for it).
         $order->update(['status' => FantasyClausePurchaseOrder::STATUS_FAILED, 'error_message' => $message]);
+        $this->notifyOrder($order);
 
         Log::channel('fantasy_api')->warning('fantasy.clause_orders.process_failed', [
             'order_id' => $order->id,
@@ -349,5 +362,41 @@ class ClausePurchaseOrderService
             : null;
 
         return $reason ?? $e->getMessage().' — '.json_encode($body);
+    }
+
+    private function notifyOrder(FantasyClausePurchaseOrder $order): void
+    {
+        $name = $order->player?->name ?? 'un jugador';
+        $format = fn (?int $v) => $v ? number_format($v, 0, ',', '.').' €' : '—';
+
+        [$title, $message, $severity] = match ($order->status) {
+            FantasyClausePurchaseOrder::STATUS_NEEDS_CONFIRMATION => [
+                "La clàusula de {$name} ha pujat",
+                'Ara és de '.$format($order->pending_confirmation_clause_value).'. L\'ordre automàtica està aturada fins que confirmis el preu nou.',
+                FantasyAlert::SEVERITY_WARNING,
+            ],
+            FantasyClausePurchaseOrder::STATUS_EXECUTED => [
+                "Has fitxat {$name}",
+                "L'ordre automàtica ha pagat la clàusula: ".$format($order->executed_clause_value).'.',
+                FantasyAlert::SEVERITY_INFO,
+            ],
+            FantasyClausePurchaseOrder::STATUS_FAILED => [
+                "No s'ha pogut pagar la clàusula de {$name}",
+                $order->error_message ?: 'Revisa l\'ordre a Clàusules.',
+                FantasyAlert::SEVERITY_WARNING,
+            ],
+            default => [null, null, null],
+        };
+
+        if (! $title) {
+            return;
+        }
+
+        $this->alerts->notify($order->fantasy_account_id, FantasyAlert::TYPE_CLAUSE_ORDER, $title, $message, [
+            'player_id' => $order->fantasy_player_id,
+            'link' => '/clauses',
+            'severity' => $severity,
+            'dedupe' => "clause-order-{$order->id}-{$order->status}-".($order->pending_confirmation_clause_value ?? $order->executed_clause_value ?? ''),
+        ]);
     }
 }

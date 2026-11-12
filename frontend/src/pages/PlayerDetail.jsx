@@ -15,6 +15,9 @@ import {
   classifyPlayerType,
   initials,
 } from '../utils/format'
+import { PageSkeleton, ErrorState } from '../components/PageState'
+import { DATA_CHANGED, useAppEvent } from '../lib/appEvents'
+import InfoTip from '../components/InfoTip'
 
 const RANGE_OPTIONS = [
   { key: '7D', days: 7 },
@@ -34,7 +37,7 @@ const DECISION_LABEL = {
   CONSIDER: 'CONSIDERAR',
   WAIT: 'ESPERAR',
   DO_NOT_BUY: 'NO COMPRAR',
-  DO_NOT_CHASE: 'NO PERSEGUIR',
+  DO_NOT_CHASE: 'NO VAL LA PENA PUJAR MÉS',
   PAY_CLAUSE: 'PAGAR CLÀUSULA',
   DO_NOT_PAY: 'NO PAGAR',
 }
@@ -73,14 +76,14 @@ const RAW_FIELD_LABEL = {
   acquisitionPrice: 'Preu d’adquisició',
   projectedValue14d: 'Valor projectat 14d',
   expectedProfit14d: 'Benefici esperat 14d',
-  expectedROI14d: 'ROI 14d',
+  expectedROI14d: 'Rendiment 14d',
   breakEvenDays: 'Break-even (dies)',
   maxBid: 'MaxBid',
   recommendedBid: 'RecommendedBid',
   marketValue: 'Valor de mercat',
   clauseValue: 'Clàusula',
-  clausePremiumPct: 'Prima de clàusula',
-  roi14d: 'ROI 14d',
+  clausePremiumPct: 'Sobrecost de clàusula',
+  roi14d: 'Rendiment 14d',
   clauseEconomicScore: 'Clause Economic Score',
   appreciation7d: 'Revalorització 7d',
   tradeScore: 'Trade Score',
@@ -145,10 +148,11 @@ export default function PlayerDetail() {
     apiClient
       .get(`/players/${id}`)
       .then((res) => setData(res.data))
-      .catch((err) => setError(err.response?.data?.message || 'Error carregant el jugador.'))
+      .catch((err) => setError(err.response?.data?.message || "No s'ha pogut carregar el jugador."))
   }
 
   useEffect(loadPlayer, [id])
+  useAppEvent(DATA_CHANGED, loadPlayer)
 
   const runOrderAction = async (action) => {
     setOrderBusy(true)
@@ -186,8 +190,8 @@ export default function PlayerDetail() {
     return [...real.slice(0, -1), ...projected]
   }, [data, range])
 
-  if (error) return <p className="text-bear">{error}</p>
-  if (!data) return <p className="text-muted-foreground">Carregant…</p>
+  if (error && !data) return <ErrorState message={error} onRetry={loadPlayer} />
+  if (!data) return <PageSkeleton cards={4} rows={4} />
 
   const decision = data.decision
   const color = decision ? DECISION_COLOR[decision.action] || 'hold' : 'hold'
@@ -411,7 +415,7 @@ export default function PlayerDetail() {
                       <p className="num mt-1 text-lg font-bold">{formatMoneyM(raw.maxBid)}</p>
                     </div>
                     <div className="rounded-xl border border-border p-3">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">ROI 14d</p>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Rendiment 14d</p>
                       <p className="num mt-1 text-lg font-bold">{formatPercent(raw.expectedROI14d * 100)}</p>
                     </div>
                     <div className="rounded-xl border border-border p-3">
@@ -428,11 +432,11 @@ export default function PlayerDetail() {
                       <p className="num mt-1 text-lg font-bold text-info">{formatMoneyM(raw.clauseValue)}</p>
                     </div>
                     <div className="rounded-xl border border-border p-3">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Prima</p>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Sobrecost</p>
                       <p className="num mt-1 text-lg font-bold">{formatPercent(raw.clausePremiumPct * 100)}</p>
                     </div>
                     <div className="rounded-xl border border-border p-3">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">ROI 14d</p>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Rendiment 14d</p>
                       <p className="num mt-1 text-lg font-bold">{formatPercent(raw.roi14d * 100)}</p>
                     </div>
                     <div className="rounded-xl border border-border p-3">
@@ -453,10 +457,13 @@ export default function PlayerDetail() {
                       <p className="mt-1 text-lg font-bold">{raw.clauseTiming.recommendedExecution === 'NOW' ? 'Avui' : 'Últim dia segur'}</p>
                     </div>
                     {raw.clauseTiming.profitableTarget != null && (
-                      <div className="rounded-xl border border-border p-3" title="No superar el valor projectat a 14 dies — recomanació pròpia, no un límit confirmat de LaLiga.">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-bull/80">Rendible fins a</p>
+                      <div className="rounded-xl border border-border p-3">
+                        <p className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-bull/80">
+                          Rendible fins a
+                          <InfoTip>Fins a aquest import la clàusula no supera el valor previst a 14 dies. És una recomanació nostra, no un límit de LaLiga.</InfoTip>
+                        </p>
                         <p className="num mt-1 text-lg font-bold text-bull">{formatMoneyM(raw.clauseTiming.profitableTarget)}</p>
-                        <p className="mt-0.5 text-[10px] text-muted-foreground">
+                        <p className="mt-0.5 text-[11px] text-muted-foreground">
                           {raw.clauseTiming.profitableTargetCost > 0
                             ? `et costaria ${formatMoneyM(raw.clauseTiming.profitableTargetCost)}`
                             : 'ja hi ets'}
@@ -464,10 +471,13 @@ export default function PlayerDetail() {
                       </div>
                     )}
                     {raw.clauseTiming.antiTheftTarget != null && (
-                      <div className="rounded-xl border border-border p-3" title="Prima a partir de la qual el risc de robatori és pràcticament nul — recomanació pròpia, no un límit confirmat de LaLiga.">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-info/80">Anti-robatori des de</p>
+                      <div className="rounded-xl border border-border p-3">
+                        <p className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-info/80">
+                          Anti-robatori des de
+                          <InfoTip>A partir d'aquest import és molt improbable que un rival te'l prengui pagant la clàusula. És una recomanació nostra, no un límit de LaLiga.</InfoTip>
+                        </p>
                         <p className="num mt-1 text-lg font-bold text-info">{formatMoneyM(raw.clauseTiming.antiTheftTarget)}</p>
-                        <p className="mt-0.5 text-[10px] text-muted-foreground">
+                        <p className="mt-0.5 text-[11px] text-muted-foreground">
                           {raw.clauseTiming.antiTheftTargetCost > 0
                             ? `et costaria ${formatMoneyM(raw.clauseTiming.antiTheftTargetCost)}`
                             : 'ja hi ets'}
@@ -550,7 +560,7 @@ export default function PlayerDetail() {
                     <p className="num mt-1 font-semibold text-info">{formatMoneyM(data.clauseValue)}</p>
                   </div>
                   <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Prima clàusula</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Sobrecost clàusula</p>
                     <p className="num mt-1 font-semibold text-info">
                       {data.clausePremiumPct != null ? formatPercent(data.clausePremiumPct * 100) : '—'}
                     </p>
@@ -669,7 +679,7 @@ export default function PlayerDetail() {
                   >
                     <span className="truncate font-medium">{alt.name}</span>
                     <span className="num flex shrink-0 items-center gap-2 text-muted-foreground">
-                      {formatMoneyM(alt.marketValue)} · {alt.buyEconomicScore} · ROI {formatPercent(alt.roi14d * 100)}
+                      {formatMoneyM(alt.marketValue)} · {alt.buyEconomicScore} · rendiment {formatPercent(alt.roi14d * 100)}
                       <ArrowRightIcon className="h-3.5 w-3.5" />
                     </span>
                   </Link>

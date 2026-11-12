@@ -40,18 +40,20 @@ class TeamValueDeltaService
         // since $since has no real baseline at all — neither is a genuine
         // market-value move, so both are left out of the past side rather
         // than distorting the delta.
-        $past = FantasyPlayerSnapshot::where('owner_team_id', $teamId)
-            ->whereNotNull('market_value')
-            ->whereIn('fantasy_player_id', $currentSnapshots->pluck('fantasy_player_id'))
-            ->where('captured_at', '<=', $since)
-            ->orderByDesc('captured_at')
-            ->get();
+        // One indexed row per player (the latest at or before $since) rather
+        // than every older snapshot — thousands per player in production.
+        $pastByPlayer = $currentSnapshots
+            ->mapWithKeys(fn (FantasyPlayerSnapshot $s) => [$s->fantasy_player_id => FantasyPlayerSnapshot::where('owner_team_id', $teamId)
+                ->where('fantasy_player_id', $s->fantasy_player_id)
+                ->whereNotNull('market_value')
+                ->where('captured_at', '<=', $since)
+                ->orderByDesc('captured_at')
+                ->first(['market_value'])])
+            ->filter();
 
-        if ($past->isEmpty()) {
+        if ($pastByPlayer->isEmpty()) {
             return null;
         }
-
-        $pastByPlayer = $past->groupBy('fantasy_player_id')->map(fn ($rows) => $rows->first());
 
         $currentTotal = (int) $currentSnapshots->sum('market_value');
         $pastTotal = (int) $pastByPlayer->sum('market_value');

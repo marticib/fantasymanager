@@ -2,7 +2,15 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import apiClient from '../api/client'
 import { cachedGet } from '../api/cachedGet'
-import { formatMoney, formatDelta, formatPercent, formatCountdown, POSITION_LABELS, initials } from '../utils/format'
+import ActionModal from '../components/ActionModal'
+import InfoTip from '../components/InfoTip'
+import { PageSkeleton, EmptyState, ErrorState } from '../components/PageState'
+import { Tag } from 'lucide-react'
+import { DATA_CHANGED, useAppEvent } from '../lib/appEvents'
+import { formatMoney, formatPercent, formatCountdown, POSITION_LABELS, initials } from '../utils/format'
+
+const OFFER_CHECK_FAILED_HELP =
+  "LaLiga diu que hi ha una oferta però ara mateix no s'ha pogut consultar l'import. Torna-ho a provar d'aquí uns minuts."
 
 function profitClass(value) {
   if (value === null || value === undefined) return 'text-muted-foreground'
@@ -34,7 +42,23 @@ function offerSourceLabel(isFromMarket) {
   return null
 }
 
-function OffersList({ row, busyOfferId, onAccept, onReject }) {
+function OfferSummary({ row }) {
+  return (
+    <>
+      <span className={`inline-flex items-center gap-1 font-semibold ${row.marketOffer !== null ? '' : 'text-muted-foreground'}`}>
+        {offerSummaryLabel(row)}
+        {row.offersCheckFailed && <InfoTip>{OFFER_CHECK_FAILED_HELP}</InfoTip>}
+      </span>
+      {offerSourceLabel(row.marketOfferIsFromMarket) && (
+        <p className={`text-[11px] ${row.marketOfferIsFromMarket ? 'text-muted-foreground' : 'font-semibold text-bull'}`}>
+          {offerSourceLabel(row.marketOfferIsFromMarket)}
+        </p>
+      )}
+    </>
+  )
+}
+
+function OffersList({ row, onAccept, onReject }) {
   if (!row.offers || row.offers.length === 0) return null
 
   return (
@@ -53,15 +77,13 @@ function OffersList({ row, busyOfferId, onAccept, onReject }) {
           <div className="flex gap-1.5">
             <button
               onClick={() => onAccept(row, offer)}
-              disabled={busyOfferId === offer.id}
-              className="rounded-md bg-bull/20 px-2 py-1 text-xs font-semibold text-bull hover:bg-bull/30 disabled:opacity-50"
+              className="min-h-9 rounded-md bg-bull/20 px-3 py-1 text-xs font-semibold text-bull hover:bg-bull/30 "
             >
               Acceptar
             </button>
             <button
               onClick={() => onReject(row, offer)}
-              disabled={busyOfferId === offer.id}
-              className="rounded-md border border-border px-2 py-1 text-xs font-semibold text-muted-foreground hover:text-bear disabled:opacity-50"
+              className="min-h-9 rounded-md border border-border px-3 py-1 text-xs font-semibold text-muted-foreground hover:text-bear disabled:opacity-50"
             >
               Rebutjar
             </button>
@@ -72,7 +94,7 @@ function OffersList({ row, busyOfferId, onAccept, onReject }) {
   )
 }
 
-function SaleCard({ row, busyOfferId, onAccept, onReject }) {
+function SaleCard({ row, onAccept, onReject }) {
   return (
     <div className="panel p-4">
       <Link to={`/players/${row.player.id}`} className="flex items-center gap-3 hover:opacity-80">
@@ -89,26 +111,18 @@ function SaleCard({ row, busyOfferId, onAccept, onReject }) {
 
       <div className="mt-3 flex items-end justify-between gap-3">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Preu de venda</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Preu de venda</p>
           <p className="num text-lg font-bold">{formatMoney(row.salePrice)}</p>
         </div>
         <div className="text-right">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Oferta del mercat</p>
-          <p
-            className={`num text-sm font-semibold ${row.marketOffer !== null ? '' : 'text-muted-foreground'}`}
-            title={row.offersCheckFailed ? 'LaLiga diu que hi ha una oferta però ara mateix no s\'ha pogut consultar l\'import — torna-ho a provar d\'aquí uns minuts' : undefined}
-          >
-            {offerSummaryLabel(row)}
-          </p>
-          {offerSourceLabel(row.marketOfferIsFromMarket) && (
-            <p className={`text-[10px] ${row.marketOfferIsFromMarket ? 'text-muted-foreground' : 'font-semibold text-bull'}`}>
-              {offerSourceLabel(row.marketOfferIsFromMarket)}
-            </p>
-          )}
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Oferta del mercat</p>
+          <div className="num text-sm">
+            <OfferSummary row={row} />
+          </div>
         </div>
       </div>
 
-      <OffersList row={row} busyOfferId={busyOfferId} onAccept={onAccept} onReject={onReject} />
+      <OffersList row={row} onAccept={onAccept} onReject={onReject} />
 
       <div className="mt-3 flex items-center justify-between border-t border-border pt-3 text-xs text-muted-foreground">
         <span>Comprat per {row.purchasePrice !== null ? formatMoney(row.purchasePrice) : '—'}</span>
@@ -128,87 +142,94 @@ function SaleCard({ row, busyOfferId, onAccept, onReject }) {
 export default function Sales() {
   const [payload, setPayload] = useState(null)
   const [error, setError] = useState('')
-  const [actionError, setActionError] = useState('')
-  const [busyOfferId, setBusyOfferId] = useState(null)
-  const [togglingAutoList, setTogglingAutoList] = useState(false)
-  const [autoListNotice, setAutoListNotice] = useState('')
+  const [pendingAction, setPendingAction] = useState(null)
 
   const load = () => {
-    cachedGet('/team/sales', null, setPayload).catch((err) => setError(err.response?.data?.message || 'Error carregant les vendes.'))
+    setError('')
+    cachedGet('/team/sales', null, setPayload).catch((err) => setError(err.response?.data?.message || "No s'han pogut carregar les vendes."))
   }
 
   useEffect(load, [])
+  useAppEvent(DATA_CHANGED, load)
 
-  const toggleAutoList = async () => {
+  const handleModalClose = (wasSuccess) => {
+    setPendingAction(null)
+    if (wasSuccess) load()
+  }
+
+  const toggleAutoList = () => {
     const enabling = !payload.autoListSquad
-    if (enabling) {
-      const ok = window.confirm(
-        'Això posarà TOTS els jugadors del teu equip que encara no hi siguin a la venda al mercat, cadascun pel seu valor de mercat actual — ' +
-          'i, a partir d\'ara, qualsevol jugador nou que fitxis es llistarà automàticament. Es veurà a tota la lliga. Vols activar-ho?',
-      )
-      if (!ok) return
-    }
-    setActionError('')
-    setAutoListNotice('')
-    setTogglingAutoList(true)
-    try {
-      const { data } = await apiClient.put('/team/sales/auto-list', { enabled: enabling })
-      if (enabling) {
-        setAutoListNotice(
-          data.failed > 0
-            ? `${data.listed} jugadors posats a la venda, ${data.failed} han fallat (revisa els logs).`
-            : `${data.listed} jugadors posats a la venda.`,
-        )
-      }
-      load()
-    } catch (err) {
-      setActionError(err.response?.data?.message || 'No s\'ha pogut canviar l\'opció.')
-    } finally {
-      setTogglingAutoList(false)
-    }
+    setPendingAction({
+      title: enabling ? 'Posar tot l\'equip a la venda' : 'Desactivar la venda automàtica',
+      description: enabling ? (
+        <>
+          Es posaran a la venda <strong className="text-foreground">tots</strong> els jugadors del teu equip que encara no hi siguin, cadascun pel seu
+          valor de mercat actual. A partir d'ara, qualsevol jugador nou que fitxis també es posarà a la venda automàticament. Es veurà a tota la lliga.
+        </>
+      ) : (
+        'Els jugadors que ja són al mercat s\'hi queden; només deixarem de posar-hi els fitxatges nous.'
+      ),
+      confirmLabel: enabling ? 'Sí, posar-los a la venda' : 'Desactivar',
+      tone: enabling ? 'positive' : 'danger',
+      run: async () => {
+        const { data } = await apiClient.put('/team/sales/auto-list', { enabled: enabling })
+        if (!enabling) return 'Venda automàtica desactivada.'
+        return data.failed > 0
+          ? `${data.listed} jugadors posats a la venda. ${data.failed} no s'han pogut posar: torna-ho a provar més tard.`
+          : `${data.listed} jugadors posats a la venda.`
+      },
+    })
   }
 
-  const handleAccept = async (row, offer) => {
-    if (!window.confirm(`Acceptar l'oferta de ${formatMoney(offer.money)} per ${row.player.name}? Es vendrà el jugador ara mateix.`)) return
-    setActionError('')
-    setBusyOfferId(offer.id)
-    try {
-      await apiClient.post(`/team/sales/${row.id}/offers/${offer.id}/accept`)
-      load()
-    } catch (err) {
-      setActionError(err.response?.data?.message || 'No s\'ha pogut acceptar l\'oferta.')
-    } finally {
-      setBusyOfferId(null)
-    }
+  const handleAccept = (row, offer) => {
+    setPendingAction({
+      title: 'Acceptar l\'oferta',
+      description: (
+        <>
+          Vendre <strong className="text-foreground">{row.player.name}</strong> per{' '}
+          <span className="num font-semibold text-foreground">{formatMoney(offer.money)}</span>? La venda es fa ara mateix i no es pot desfer.
+          {offer.isFromMarket && <span className="mt-2 block">És l'oferta estàndard del mercat, no la d'un mànager.</span>}
+        </>
+      ),
+      confirmLabel: 'Sí, vendre',
+      tone: 'positive',
+      run: async () => {
+        await apiClient.post(`/team/sales/${row.id}/offers/${offer.id}/accept`)
+        return `${row.player.name} venut per ${formatMoney(offer.money)}.`
+      },
+    })
   }
 
-  const handleReject = async (row, offer) => {
-    if (!window.confirm(`Rebutjar l'oferta de ${formatMoney(offer.money)} per ${row.player.name}?`)) return
-    setActionError('')
-    setBusyOfferId(offer.id)
-    try {
-      await apiClient.post(`/team/sales/${row.id}/offers/${offer.id}/reject`)
-      load()
-    } catch (err) {
-      setActionError(err.response?.data?.message || 'No s\'ha pogut rebutjar l\'oferta.')
-    } finally {
-      setBusyOfferId(null)
-    }
+  const handleReject = (row, offer) => {
+    setPendingAction({
+      title: 'Rebutjar l\'oferta',
+      description: (
+        <>
+          Rebutjar l'oferta de <span className="num font-semibold text-foreground">{formatMoney(offer.money)}</span> per{' '}
+          <strong className="text-foreground">{row.player.name}</strong>? El jugador continuarà en venda.
+        </>
+      ),
+      confirmLabel: 'Sí, rebutjar',
+      tone: 'danger',
+      run: async () => {
+        await apiClient.post(`/team/sales/${row.id}/offers/${offer.id}/reject`)
+        return `Oferta per ${row.player.name} rebutjada.`
+      },
+    })
   }
 
-  if (error) return <p className="text-bear">{error}</p>
-  if (!payload) return <p className="text-muted-foreground">Carregant…</p>
+  if (error && !payload) return <ErrorState message={error} onRetry={load} />
+  if (!payload) return <PageSkeleton cards={3} rows={4} />
 
   const rows = payload.players || []
   const { summary } = payload
 
   return (
     <div>
+      <ActionModal request={pendingAction} onClose={handleModalClose} />
+
       <h1 className="text-2xl font-bold tracking-tight">Vendes</h1>
       <p className="mt-1 text-sm text-muted-foreground">Jugadors propis que tens en venda al mercat ara mateix.</p>
-
-      {actionError && <p className="mt-3 text-sm text-bear">{actionError}</p>}
-      {autoListNotice && <p className="mt-3 text-sm text-bull">{autoListNotice}</p>}
 
       <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-surface p-4">
         <div>
@@ -221,8 +242,7 @@ export default function Sales() {
         </div>
         <button
           onClick={toggleAutoList}
-          disabled={togglingAutoList}
-          className={`shrink-0 rounded-lg px-3 py-1.5 text-sm font-semibold disabled:opacity-50 ${
+          className={`min-h-11 shrink-0 rounded-lg px-4 py-1.5 text-sm font-semibold disabled:opacity-50 ${
             payload.autoListSquad ? 'border border-border text-muted-foreground hover:text-bear' : 'bg-bull/20 text-bull hover:bg-bull/30'
           }`}
         >
@@ -233,32 +253,47 @@ export default function Sales() {
       {rows.length > 0 && (
         <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
           <div className="rounded-xl border border-border bg-surface p-4">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">En venda</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">En venda</p>
             <p className="num mt-1 text-xl font-bold">{summary.count}</p>
           </div>
           <div className="rounded-xl border border-border bg-surface p-4">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Amb oferta rebuda</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Amb oferta rebuda</p>
             <p className="num mt-1 text-xl font-bold">{summary.withOffers}</p>
           </div>
           <div className="rounded-xl border border-border bg-surface p-4">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <p className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Guany/Pèrdua{summary.profitKnownCount < summary.count ? ` (${summary.profitKnownCount}/${summary.count})` : ''}
+              <InfoTip>
+                Suma de (oferta rebuda − preu de compra) dels jugadors on coneixem les dues xifres. Entre parèntesis, de quants jugadors ho sabem.
+              </InfoTip>
             </p>
             <p className={`num mt-1 text-xl font-bold ${profitClass(summary.totalProfit)}`}>
-              {summary.totalProfit !== null ? formatDelta(summary.totalProfit) : '—'}
+              {summary.totalProfit !== null ? formatSignedFull(summary.totalProfit) : '—'}
             </p>
           </div>
         </div>
       )}
 
-      <p className="mt-4 text-xs text-muted-foreground">
-        «Preu de venda» és el que tu vas demanar en posar-lo al mercat, no una oferta de ningú. L'«Oferta del mercat» només apareix quan hi
-        ha una oferta real pendent — si encara no n'hi ha cap, surt «Sense ofertes» i el guany/pèrdua es queda en «—» (no s'ha venut res
-        encara, no hi ha res a calcular). La majoria d'ofertes són l'«oferta estàndard del mercat»: LaLiga en genera una automàticament, a
-        prop del valor de mercat, per a qualsevol jugador en venda que encara ningú no ha pujat — no és un mànager rival volent comprar-lo,
-        encara que es puja/rebutja igual. El preu de compra ve de l'historial d'activitat de la lliga i només es coneix des que en tenim
-        registre — si vas fitxar un jugador abans d'això (p. ex. a l'assignació inicial), també es queda en «—».
-      </p>
+      <details className="mt-4 rounded-xl border border-border bg-surface px-4 py-3 text-sm">
+        <summary className="cursor-pointer select-none font-semibold text-muted-foreground hover:text-foreground">Com funciona aquesta pàgina?</summary>
+        <ul className="mt-3 list-disc space-y-1.5 pl-5 text-xs leading-relaxed text-muted-foreground">
+          <li>
+            <strong className="text-foreground">Preu de venda</strong> és el que vas demanar en posar-lo al mercat. No és una oferta de ningú.
+          </li>
+          <li>
+            <strong className="text-foreground">Oferta del mercat</strong> només surt quan hi ha una oferta real pendent. Si no n'hi ha cap, posa
+            «Sense ofertes» i el guany/pèrdua queda en «—».
+          </li>
+          <li>
+            La majoria d'ofertes són l'<strong className="text-foreground">oferta estàndard del mercat</strong>: LaLiga en fa una automàticament, a
+            prop del valor, per a qualsevol jugador en venda que ningú no ha pujat. No és un mànager rival, però s'accepta o es rebutja igual.
+          </li>
+          <li>
+            El <strong className="text-foreground">preu de compra</strong> surt de l'historial d'activitat de la lliga. Si vas fitxar el jugador abans
+            que en tinguéssim registre (per exemple, a l'assignació inicial), queda en «—».
+          </li>
+        </ul>
+      </details>
 
       <div className="mt-4 hidden overflow-x-auto rounded-xl border border-border bg-surface md:block">
         <table className="w-full min-w-200 text-sm">
@@ -266,23 +301,34 @@ export default function Sales() {
             <tr className="border-b border-border text-left text-xs uppercase text-muted-foreground">
               <th className="px-4 py-3">Jugador</th>
               <th className="px-4 py-3">Pos.</th>
-              <th className="px-4 py-3" title="Valor de mercat actual del jugador segons LaLiga Fantasy">
-                Valor
+              <th className="px-4 py-3">
+                <span className="inline-flex items-center gap-1">
+                  Valor <InfoTip>Valor de mercat actual del jugador segons LaLiga Fantasy.</InfoTip>
+                </span>
               </th>
-              <th className="px-4 py-3" title="Preu que tu vas demanar en posar-lo al mercat — no és una oferta de ningú">
-                Preu de venda
+              <th className="px-4 py-3">
+                <span className="inline-flex items-center gap-1">
+                  Preu de venda <InfoTip>El preu que vas demanar en posar-lo al mercat. No és una oferta de ningú.</InfoTip>
+                </span>
               </th>
-              <th
-                className="px-4 py-3"
-                title="Oferta real pendent — sovint l'estàndard del mercat (automàtica, no d'un mànager) — «Sense ofertes» si encara no n'hi ha cap"
-              >
-                Oferta del mercat
+              <th className="px-4 py-3">
+                <span className="inline-flex items-center gap-1">
+                  Oferta del mercat
+                  <InfoTip>
+                    Oferta real pendent. Sovint és l'oferta estàndard del mercat (automàtica, no d'un mànager). Posa «Sense ofertes» si encara no n'hi ha
+                    cap.
+                  </InfoTip>
+                </span>
               </th>
-              <th className="px-4 py-3" title="El que vas pagar per aquest jugador, segons l'historial d'activitat de la lliga">
-                Preu de compra
+              <th className="px-4 py-3">
+                <span className="inline-flex items-center gap-1">
+                  Preu de compra <InfoTip>El que vas pagar per aquest jugador, segons l'historial d'activitat de la lliga.</InfoTip>
+                </span>
               </th>
-              <th className="px-4 py-3" title="Oferta del mercat menys preu de compra — nomès si hi ha una oferta real i preu de compra conegut">
-                Guany/Pèrdua
+              <th className="px-4 py-3">
+                <span className="inline-flex items-center gap-1">
+                  Guany/Pèrdua <InfoTip>Oferta del mercat menys preu de compra. Només surt si hi ha oferta i coneixem el preu de compra.</InfoTip>
+                </span>
               </th>
               <th className="px-4 py-3">Caducitat</th>
             </tr>
@@ -292,7 +338,7 @@ export default function Sales() {
               <tr key={row.id} className="border-b border-border last:border-0 hover:bg-surface-raised">
                 <td className="px-4 py-3">
                   <Link to={`/players/${row.player.id}`} className="flex items-center gap-2.5 hover:text-primary">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted-foreground/15 text-[10px] font-bold text-muted-foreground">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted-foreground/15 text-[11px] font-bold text-muted-foreground">
                       {row.player.imageUrl ? <img src={row.player.imageUrl} alt="" className="h-full w-full object-cover" /> : initials(row.player.name)}
                     </div>
                     <div className="min-w-0">
@@ -309,18 +355,8 @@ export default function Sales() {
                 <td className="px-4 py-3 font-medium">{formatMoney(row.marketValue)}</td>
                 <td className="px-4 py-3 text-muted-foreground">{formatMoney(row.salePrice)}</td>
                 <td className="px-4 py-3">
-                  <span
-                    className={`font-semibold ${row.marketOffer !== null ? '' : 'text-muted-foreground'}`}
-                    title={row.offersCheckFailed ? 'LaLiga diu que hi ha una oferta però ara mateix no s\'ha pogut consultar l\'import — torna-ho a provar d\'aquí uns minuts' : undefined}
-                  >
-                    {offerSummaryLabel(row)}
-                  </span>
-                  {offerSourceLabel(row.marketOfferIsFromMarket) && (
-                    <p className={`text-[10px] ${row.marketOfferIsFromMarket ? 'text-muted-foreground' : 'font-semibold text-bull'}`}>
-                      {offerSourceLabel(row.marketOfferIsFromMarket)}
-                    </p>
-                  )}
-                  <OffersList row={row} busyOfferId={busyOfferId} onAccept={handleAccept} onReject={handleReject} />
+                  <OfferSummary row={row} />
+                  <OffersList row={row} onAccept={handleAccept} onReject={handleReject} />
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">{row.purchasePrice !== null ? formatMoney(row.purchasePrice) : '—'}</td>
                 <td className={`px-4 py-3 font-medium ${profitClass(row.profit)}`}>
@@ -333,14 +369,27 @@ export default function Sales() {
             ))}
           </tbody>
         </table>
-        {rows.length === 0 && <p className="p-6 text-center text-sm text-muted-foreground">Ara mateix no tens cap jugador en venda al mercat.</p>}
+        {rows.length === 0 && (
+          <EmptyState
+            icon={Tag}
+            className="m-4"
+            title="No tens cap jugador en venda"
+            message="Posa'n un a la venda des de LaLiga Fantasy o activa la venda automàtica de tot l'equip."
+          />
+        )}
       </div>
 
       <div className="mt-4 space-y-3 md:hidden">
         {rows.map((row) => (
-          <SaleCard key={row.id} row={row} busyOfferId={busyOfferId} onAccept={handleAccept} onReject={handleReject} />
+          <SaleCard key={row.id} row={row} onAccept={handleAccept} onReject={handleReject} />
         ))}
-        {rows.length === 0 && <p className="panel p-6 text-center text-sm text-muted-foreground">Ara mateix no tens cap jugador en venda al mercat.</p>}
+        {rows.length === 0 && (
+          <EmptyState
+            icon={Tag}
+            title="No tens cap jugador en venda"
+            message="Posa'n un a la venda des de LaLiga Fantasy o activa la venda automàtica de tot l'equip."
+          />
+        )}
       </div>
     </div>
   )

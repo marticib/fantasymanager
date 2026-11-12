@@ -5,6 +5,7 @@ import apiClient from '../api/client'
 import ChangeBadge from '../components/ChangeBadge'
 import { ChevronDownIcon, CheckIcon } from '../components/Icons'
 import { formatMoney, formatMoneyM, formatDelta, formatPercent, formatFullDate, formatDate, POSITION_LABELS, initials } from '../utils/format'
+import { PageSkeleton, BlockSkeleton } from '../components/PageState'
 
 const RANGE_OPTIONS = [
   { key: '7d', label: '7D' },
@@ -34,7 +35,7 @@ const ACTION_LABEL = {
   HOLD: 'Mantenir',
   LOCK_CLAUSE: 'Pujar clàusula',
   PAY_CLAUSE: 'Pagar clàusula',
-  DO_NOT_CHASE: 'No perseguir',
+  DO_NOT_CHASE: 'No val la pena pujar més',
 }
 
 const ACTION_COLOR_CLASS = {
@@ -115,11 +116,11 @@ function DayRow({ row }) {
               className="flex items-center justify-between gap-3 rounded-lg px-2 py-2 text-sm hover:bg-surface-raised"
             >
               <div className="flex min-w-0 items-center gap-2.5">
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted-foreground/15 text-[10px] font-bold text-muted-foreground">
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted-foreground/15 text-[11px] font-bold text-muted-foreground">
                   {p.imageUrl ? <img src={p.imageUrl} alt="" className="h-full w-full object-cover" /> : initials(p.name)}
                 </div>
                 <span className="truncate">{p.name}</span>
-                <span className="shrink-0 rounded-md border border-border px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                <span className="shrink-0 rounded-md border border-border px-1.5 py-0.5 text-[11px] font-semibold text-muted-foreground">
                   {POSITION_LABELS[p.position] || p.position || '—'}
                 </span>
               </div>
@@ -151,7 +152,7 @@ function DecisionRow({ decision }) {
     <div className="border-b border-border last:border-0">
       <button onClick={toggle} className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-surface-raised">
         <ChevronDownIcon className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${open ? 'rotate-180' : ''}`} />
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted-foreground/15 text-[10px] font-bold text-muted-foreground">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted-foreground/15 text-[11px] font-bold text-muted-foreground">
           {decision.player?.imageUrl ? (
             <img src={decision.player.imageUrl} alt="" className="h-full w-full object-cover" />
           ) : (
@@ -160,7 +161,7 @@ function DecisionRow({ decision }) {
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${ACTION_COLOR_CLASS[decision.action] || 'bg-muted-foreground/15 text-muted-foreground'}`}>
+            <span className={`rounded-md px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wide ${ACTION_COLOR_CLASS[decision.action] || 'bg-muted-foreground/15 text-muted-foreground'}`}>
               {ACTION_LABEL[decision.action] || decision.action}
             </span>
             <span className="truncate text-sm font-medium">{decision.player?.name || '—'}</span>
@@ -185,7 +186,7 @@ function DecisionRow({ decision }) {
       {open && (
         <div className="border-t border-border bg-background/40 px-4 py-4">
           {!detail ? (
-            <p className="text-sm text-muted-foreground">Carregant…</p>
+            <BlockSkeleton rows={3} />
           ) : (
             <div className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
               <div>
@@ -197,7 +198,7 @@ function DecisionRow({ decision }) {
                 <p className="font-semibold">{formatMoney(detail.referenceValue)}</p>
               </div>
               <div>
-                <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Score</p>
+                <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Puntuació</p>
                 <p className="font-semibold">{detail.mainScore ?? '—'}</p>
               </div>
               <div>
@@ -284,7 +285,7 @@ export default function History() {
     apiClient.get('/history/decisions', { params }).then((res) => setDecisions(res.data))
   }, [typeFilter, outcomeFilter, page])
 
-  if (!portfolio) return <p className="text-muted-foreground">Carregant…</p>
+  if (!portfolio) return <PageSkeleton cards={3} rows={6} />
 
   const rows = portfolio.data || []
   const summary = portfolio.summary
@@ -325,7 +326,7 @@ export default function History() {
               accent={summary.growth >= 0 ? 'text-bull' : 'text-bear'}
             />
             <StatCard
-              label="ROI"
+              label="Rendiment"
               value={summary.roiPct != null ? formatPercent(summary.roiPct) : '—'}
               accent={summary.roiPct >= 0 ? 'text-bull' : 'text-bear'}
             />
@@ -404,7 +405,7 @@ export default function History() {
               value={performance.theoreticalProfit != null ? formatDelta(performance.theoreticalProfit) : '—'}
             />
             <PerformanceCard
-              label="ROI mitjà"
+              label="Rendiment mitjà"
               value={performance.averageRoiPct != null ? formatPercent(performance.averageRoiPct) : '—'}
             />
           </div>
@@ -433,7 +434,7 @@ export default function History() {
 
         <div className="mt-4 overflow-hidden rounded-2xl border border-border bg-surface">
           {!decisions ? (
-            <p className="p-6 text-center text-sm text-muted-foreground">Carregant…</p>
+            <BlockSkeleton rows={4} />
           ) : decisions.data.length === 0 ? (
             <p className="p-6 text-center text-sm text-muted-foreground">Cap decisió amb aquests filtres.</p>
           ) : (

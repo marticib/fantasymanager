@@ -3,11 +3,16 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\RunFantasySyncJob;
+use App\Models\FantasyAlert;
+use App\Models\FantasyClausePurchaseOrder;
+use App\Models\FantasyMarketPlayer;
 use App\Models\FantasyStanding;
 use App\Services\Recommendation\FantasySettingsService;
 use App\Services\Recommendation\TeamValueDeltaService;
 use App\Services\Recommendation\TodayActionsService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 
 class DashboardController extends Controller
 {
@@ -50,17 +55,72 @@ class DashboardController extends Controller
     }
 
     /**
-     * Just what the app-wide header needs — previously the header loaded the
-     * whole today() payload (every recommendation engine) for these 3 fields.
+     * Everything the app-wide shell needs, kept to a few cheap queries since
+     * every open tab polls it: league/matchday/last sync, whether a sync is
+     * running right now, whether the LaLiga session needs reconnecting, the
+     * navigation badges and the unread notification count. (It used to load
+     * the whole today() payload — every recommendation engine — for 3 fields.)
      */
     public function header(Request $request)
     {
         $account = $this->currentAccount($request);
+        $league = $account->activeLeague;
+        $teamId = $account->active_team_id;
+
+        $salesWithOffers = 0;
+        $myActiveBids = 0;
+
+        if ($league) {
+            FantasyMarketPlayer::where('fantasy_league_id', $league->id)
+                ->where('is_on_market', true)
+                ->get(['seller_team_id', 'raw_payload'])
+                ->each(function (FantasyMarketPlayer $m) use ($teamId, &$salesWithOffers, &$myActiveBids) {
+                    if ($teamId && $m->seller_team_id === $teamId && (int) ($m->raw_payload['numberOfOffers'] ?? 0) > 0) {
+                        $salesWithOffers++;
+                    }
+                    if (data_get($m->raw_payload, 'bid.id')) {
+                        $myActiveBids++;
+                    }
+                });
+        }
 
         return response()->json([
-            'leagueName' => $account->activeLeague?->name,
+            'leagueName' => $league?->name,
             'currentMatchday' => $account->current_matchday,
             'lastSyncedAt' => $account->last_synced_at?->toIso8601String(),
+            'syncing' => RunFantasySyncJob::isRunning($account->id),
+            'laligaSessionExpired' => $account->laliga_session_expired_at !== null || ! $account->hasValidTokens(),
+            'badges' => [
+                'sales' => $salesWithOffers,
+                'market' => $myActiveBids,
+                'clauses' => FantasyClausePurchaseOrder::where('fantasy_account_id', $account->id)
+                    ->where('status', FantasyClausePurchaseOrder::STATUS_NEEDS_CONFIRMATION)
+                    ->count(),
+            ],
+            'unreadAlerts' => FantasyAlert::where('fantasy_account_id', $account->id)->whereNull('read_at')->count(),
+        ]);
+    }
+
+    /**
+     * "Since your last visit" summary for Avui: notifications raised since
+     * then (grouped by kind) and how much the squad's value moved.
+     */
+    public function since(Request $request, TeamValueDeltaService $teamValueDelta)
+    {
+        $data = $request->validate(['since' => ['required', 'date']]);
+        $account = $this->currentAccount($request);
+        $since = Carbon::parse($data['since']);
+
+        $alerts = FantasyAlert::where('fantasy_account_id', $account->id)
+            ->where('created_at', '>', $since)
+            ->latest()
+            ->get(['type', 'title', 'link']);
+
+        return response()->json([
+            'since' => $since->toIso8601String(),
+            'teamValueDelta' => $account->active_team_id ? $teamValueDelta->deltaSince($account->active_team_id, $since) : null,
+            'alertCounts' => $alerts->countBy('type'),
+            'latest' => $alerts->take(5)->values(),
         ]);
     }
 

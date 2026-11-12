@@ -14,7 +14,7 @@ class ClauseController extends Controller
         $team = $account->activeTeam;
 
         if (! $team) {
-            return response()->json(['message' => 'No active team selected yet. Select a league first.'], 404);
+            return response()->json(['message' => 'Encara no tens cap equip seleccionat. Tria una lliga primer.'], 404);
         }
 
         $hasRivalData = $team->league?->teams()

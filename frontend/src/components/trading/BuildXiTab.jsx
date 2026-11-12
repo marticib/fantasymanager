@@ -45,7 +45,7 @@ function LineupRow({ row, horizon }) {
           label={isOwn ? `Evolució ${horizon}D` : `Benefici ${horizon}D`}
           value={row.gain === null || row.gain === undefined ? '—' : formatDelta(row.gain)}
           tone={toneFor(row.gain)}
-          sub={row.roi !== null && row.roi !== undefined ? `ROI ${formatPercent(row.roi * 100)}` : null}
+          sub={row.roi !== null && row.roi !== undefined ? `Rendiment ${formatPercent(row.roi * 100)}` : null}
         />
       </div>
 
@@ -139,7 +139,7 @@ export default function BuildXiTab({ horizon, onMeta }) {
                   sub="Només adquisicions noves"
                 />
                 <StatCard
-                  label="ROI noves compres"
+                  label="Rendiment noves compres"
                   value={data.summary.newAcquisitionsRoi === null ? '—' : formatPercent(data.summary.newAcquisitionsRoi * 100)}
                   tone={toneFor(data.summary.newAcquisitionsRoi)}
                 />

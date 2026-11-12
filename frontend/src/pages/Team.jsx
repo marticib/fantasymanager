@@ -5,6 +5,9 @@ import ChangeBadge from '../components/ChangeBadge'
 import Sparkline from '../components/Sparkline'
 import { TrendingUp, Wallet, Link2, ChevronDown } from 'lucide-react'
 import { formatMoneyM, formatPercent, formatDelta, formatFullDate, POSITION_LABELS, initials } from '../utils/format'
+import { PageSkeleton, ErrorState } from '../components/PageState'
+import { DATA_CHANGED, useAppEvent } from '../lib/appEvents'
+import InfoTip from '../components/InfoTip'
 
 const ACTION_BADGE = {
   SELL: 'bg-bear-soft text-bear',
@@ -42,7 +45,7 @@ function ScoreStat({ label, value, colorClass }) {
   return (
     <div className="text-center">
       <p className={`num text-lg font-bold ${colorClass}`}>{value}</p>
-      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</p>
     </div>
   )
 }
@@ -71,17 +74,18 @@ function ActionHint({ p }) {
 
   return (
     <>
-      {d?.confidence != null && <p className="mt-1 text-[10px] text-muted-foreground">Confiança {d.confidence}%</p>}
+      {d?.confidence != null && <p className="mt-1 text-[11px] text-muted-foreground">Confiança {d.confidence}%</p>}
       {p.action === 'SELL' && d?.sellReasonCode && (
-        <p className="mt-0.5 text-[10px] text-muted-foreground">{SELL_REASON_LABEL[d.sellReasonCode]}</p>
+        <p className="mt-0.5 text-[11px] text-muted-foreground">{SELL_REASON_LABEL[d.sellReasonCode]}</p>
       )}
       {p.action === 'HOLD' && d?.clauseTiming?.shouldRaise && !d.clauseTiming.shouldRaiseNow && (
-        <p className="mt-0.5 text-[10px] text-info" title="El Clause Score és alt, però encara no és el moment de gastar-hi diners.">
+        <p className="mt-0.5 text-[11px] text-info">
           🔒 Pujar clàusula
           {d.clauseTiming.daysRemaining != null && ` en ${d.clauseTiming.daysRemaining}d`}
+          <InfoTip>Convé pujar-li la clàusula, però encara no és el moment de gastar-hi diners.</InfoTip>
         </p>
       )}
-      {p.action === 'LOCK_CLAUSE' && <p className="mt-0.5 text-[10px] text-info">🔴 Avui — protecció a punt d'acabar</p>}
+      {p.action === 'LOCK_CLAUSE' && <p className="mt-0.5 text-[11px] text-info">🔴 Avui — protecció a punt d'acabar</p>}
     </>
   )
 }
@@ -104,16 +108,15 @@ function PlayerRow({ p }) {
           ) : (
             <span
               className={`num ${eurDelta > 0 ? 'text-bull' : eurDelta < 0 ? 'text-bear' : 'text-muted-foreground'}`}
-              title={!isOwn ? 'Font externa (futbolfantasy.com, no oficial) — encara no tenim prou historial propi' : undefined}
             >
               {eurDelta >= 0 ? '↗' : '↘'} {formatDelta(eurDelta)}
-              {!isOwn && <span className="text-[9px] text-muted-foreground"> *ext.</span>}
+              {!isOwn && <span className="text-[11px] text-muted-foreground"> *ext.</span>}
             </span>
           )}
         </td>
         <td className="px-4 py-2.5">
           <Link to={`/players/${p.id}`} className="flex items-center gap-2.5 hover:text-primary">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border bg-surface-raised text-[10px] font-bold text-muted-foreground">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border bg-surface-raised text-[11px] font-bold text-muted-foreground">
               {p.imageUrl ? <img src={p.imageUrl} alt="" className="h-full w-full object-cover" /> : initials(p.name)}
             </div>
             <div className="min-w-0">
@@ -143,7 +146,7 @@ function PlayerRow({ p }) {
         <td className="px-4 py-2.5">
           <div className="flex items-start gap-1">
             <div>
-              <span className={`inline-flex cursor-help rounded-md px-2 py-1 text-xs font-bold ${ACTION_BADGE[p.action]}`} title={d?.reason}>
+              <span className={`inline-flex rounded-md px-2 py-1 text-xs font-bold ${ACTION_BADGE[p.action]}`}>
                 {ACTION_LABEL[p.action]}
               </span>
               <ActionHint p={p} />
@@ -151,10 +154,11 @@ function PlayerRow({ p }) {
             {d?.reason && (
               <button
                 onClick={() => setOpen((o) => !o)}
-                className="mt-0.5 shrink-0 rounded p-0.5 text-muted-foreground hover:text-primary"
-                title="Veure com s'ha calculat"
+                className="shrink-0 rounded p-1 text-muted-foreground hover:text-primary"
+                aria-label={open ? 'Amagar el càlcul' : 'Veure com s\'ha calculat'}
+                aria-expanded={open}
               >
-                <ChevronDown className={`h-3.5 w-3.5 transition-transform ${open ? 'rotate-180' : ''}`} />
+                <ChevronDown className={`h-4 w-4 transition-transform ${open ? 'rotate-180' : ''}`} />
               </button>
             )}
           </div>
@@ -207,7 +211,7 @@ function PlayerCard({ p }) {
               }`}
             >
               {eurDelta >= 0 ? '↗' : '↘'} {formatDelta(eurDelta)}
-              {!isOwn && <span className="text-[9px] opacity-80"> *ext.</span>}
+              {!isOwn && <span className="text-[11px] opacity-80"> *ext.</span>}
             </span>
           )}
         </div>
@@ -254,14 +258,18 @@ export default function Team() {
   const [error, setError] = useState('')
   const [dailyHistory, setDailyHistory] = useState(null)
 
-  useEffect(() => {
-    cachedGet('/team', null, setTeam).catch((err) => setError(err.response?.data?.message || 'Error carregant la plantilla.'))
+  const load = () => {
+    setError('')
+    cachedGet('/team', null, setTeam).catch((err) => setError(err.response?.data?.message || "No s'ha pogut carregar la plantilla."))
     cachedGet('/team/analysis', null, setAnalysis).catch(() => {})
     cachedGet('/history/team-value', { range: '7d' }, (d) => setDailyHistory(d.data)).catch(() => {})
-  }, [])
+  }
 
-  if (error) return <p className="text-bear">{error}</p>
-  if (!team) return <p className="text-muted-foreground">Carregant…</p>
+  useEffect(load, [])
+  useAppEvent(DATA_CHANGED, load)
+
+  if (error && !team) return <ErrorState message={error} onRetry={load} />
+  if (!team) return <PageSkeleton cards={3} rows={8} />
 
   const sellCount = team.players.filter((p) => p.action === 'SELL').length
   const lockClauseCount = team.players.filter((p) => p.action === 'LOCK_CLAUSE').length
@@ -310,7 +318,7 @@ export default function Team() {
       {analysis?.weakPositions?.length > 0 && (
         <p className="mt-4 rounded-xl border border-warn/30 bg-warn-soft px-4 py-3 text-sm text-warn">
           Prioritat alta: reforça {analysis.weakPositions.map((p) => POSITION_LABELS[p] || p).join(', ')} — menys de 2
-          jugadors amb Fantasy Score &gt; 70.
+          jugadors amb puntuació &gt; 70.
         </p>
       )}
 
@@ -338,11 +346,13 @@ export default function Team() {
               <th className="px-4 py-3">Pos.</th>
               <th className="px-4 py-3">Valor</th>
               <th className="px-4 py-3">Clàusula</th>
-              <th className="px-4 py-3" title="Font externa (futbolfantasy.com, no oficial)">
-                7D ext.*
+              <th className="px-4 py-3">
+                <span className="inline-flex items-center gap-1">
+                  7D ext.* <InfoTip>Variació del valor en 7 dies segons futbolfantasy.com (font externa, no oficial).</InfoTip>
+                </span>
               </th>
               <th className="px-4 py-3">Mitjana</th>
-              <th className="px-4 py-3">Score</th>
+              <th className="px-4 py-3">Puntuació</th>
               <th className="px-4 py-3">
                 Acció <span className="normal-case text-muted-foreground">(desplega per veure el càlcul)</span>
               </th>

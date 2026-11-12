@@ -1,0 +1,73 @@
+/** Shimmering placeholder shaped like a page (title, stat cards, rows) while data loads. */
+export function PageSkeleton({ cards = 3, rows = 6 }) {
+  return (
+    <div className="animate-pulse" aria-busy="true" aria-label="Carregant">
+      <div className="h-8 w-48 rounded-lg bg-surface-raised" />
+      <div className="mt-2 h-4 w-72 max-w-full rounded bg-surface-raised/70" />
+      {cards > 0 && (
+        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
+          {Array.from({ length: cards }, (_, i) => (
+            <div key={i} className="h-20 rounded-xl border border-border bg-surface" />
+          ))}
+        </div>
+      )}
+      <div className="mt-6 space-y-2">
+        {Array.from({ length: rows }, (_, i) => (
+          <div key={i} className="flex h-14 items-center gap-3 rounded-xl border border-border bg-surface px-4">
+            <div className="h-8 w-8 shrink-0 rounded-full bg-surface-raised" />
+            <div className="h-3 flex-1 rounded bg-surface-raised" />
+            <div className="h-3 w-16 rounded bg-surface-raised" />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/** Inline placeholder for a block inside a page (a list or chart still loading). */
+export function BlockSkeleton({ rows = 3 }) {
+  return (
+    <div className="animate-pulse space-y-2 p-4" aria-busy="true" aria-label="Carregant">
+      {Array.from({ length: rows }, (_, i) => (
+        <div key={i} className="h-4 rounded bg-surface-raised" style={{ width: `${90 - i * 15}%` }} />
+      ))}
+    </div>
+  )
+}
+
+/** A friendly "nothing here" message with an optional way out. */
+export function EmptyState({ icon: Icon, title, message, actionLabel, onAction, className = '' }) {
+  return (
+    <div className={`flex flex-col items-center rounded-xl border border-border bg-surface px-6 py-10 text-center ${className}`}>
+      {Icon && (
+        <div className="flex h-11 w-11 items-center justify-center rounded-full bg-surface-raised text-muted-foreground">
+          <Icon className="h-5 w-5" />
+        </div>
+      )}
+      <p className="mt-3 font-semibold">{title}</p>
+      {message && <p className="mt-1 max-w-md text-sm text-muted-foreground">{message}</p>}
+      {actionLabel && onAction && (
+        <button
+          onClick={onAction}
+          className="mt-4 min-h-11 rounded-lg border border-border px-4 text-sm font-semibold hover:border-primary/50 hover:text-primary"
+        >
+          {actionLabel}
+        </button>
+      )}
+    </div>
+  )
+}
+
+/** A load error with a retry button instead of a dead red line. */
+export function ErrorState({ message, onRetry }) {
+  return (
+    <div className="rounded-xl border border-bear/30 bg-bear/10 px-5 py-4">
+      <p className="text-sm font-semibold text-bear">{message}</p>
+      {onRetry && (
+        <button onClick={onRetry} className="mt-3 min-h-10 rounded-lg bg-bear/20 px-3 text-sm font-semibold text-bear hover:bg-bear/30">
+          Tornar-ho a provar
+        </button>
+      )}
+    </div>
+  )
+}

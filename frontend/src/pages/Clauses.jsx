@@ -5,9 +5,15 @@ import ScoreRing from '../components/ScoreRing'
 import Sparkline from '../components/Sparkline'
 import { ShieldIcon, WalletIcon, ArrowRightIcon } from '../components/Icons'
 import ClauseOrdersPanel from '../components/ClauseOrdersPanel'
+import InfoTip from '../components/InfoTip'
+import { PageSkeleton, EmptyState, ErrorState } from '../components/PageState'
+import { SearchX } from 'lucide-react'
+import { usePersistentState } from '../lib/storage'
+import { DATA_CHANGED, useAppEvent } from '../lib/appEvents'
 import { formatMoneyM, formatDelta, formatPercent, POSITION_LABELS, initials, ACTION_LABELS } from '../utils/format'
 
 const POSITIONS = ['GK', 'DF', 'MF', 'FW']
+const DEFAULT_FILTERS = { position: null, onlyRecommended: false, onlyLocked: true }
 
 const ACTION_BADGE = {
   PAY_CLAUSE: 'bg-info/15 text-info',
@@ -152,7 +158,7 @@ function ClauseCard({ row }) {
           {ACTION_LABELS[row.economicRecommendation]}
         </span>
         <span className="num text-sm text-muted-foreground">
-          ROI 14D <span className={`font-semibold ${changeClass(row.roi14d)}`}>{row.roi14d !== null ? formatPercent(row.roi14d * 100) : '—'}</span>
+          Rendiment 14d <span className={`font-semibold ${changeClass(row.roi14d)}`}>{row.roi14d !== null ? formatPercent(row.roi14d * 100) : '—'}</span>
         </span>
       </div>
     </Link>
@@ -164,16 +170,25 @@ export default function Clauses() {
   const [error, setError] = useState('')
 
   const [search, setSearch] = useState('')
-  const [position, setPosition] = useState(null)
-  const [onlyRecommended, setOnlyRecommended] = useState(false)
-  const [onlyLocked, setOnlyLocked] = useState(true)
-  const [sort, setSort] = useState({ key: 'clauseEconomicScore', direction: 'desc' })
+  const [filters, setFilters] = usePersistentState('clauses-filters', DEFAULT_FILTERS)
+  const [sort, setSort] = usePersistentState('clauses-sort', { key: 'clauseEconomicScore', direction: 'desc' })
+  const { position, onlyRecommended, onlyLocked } = { ...DEFAULT_FILTERS, ...filters }
+  const setFilter = (key, value) => setFilters((f) => ({ ...DEFAULT_FILTERS, ...f, [key]: value }))
+  const filtersActive = search !== '' || JSON.stringify({ ...DEFAULT_FILTERS, ...filters }) !== JSON.stringify(DEFAULT_FILTERS)
+  const clearFilters = () => {
+    setSearch('')
+    setFilters(DEFAULT_FILTERS)
+  }
 
-  useEffect(() => {
+  const load = () => {
+    setError('')
     cachedGet('/clauses/opportunities', null, setPayload).catch((err) =>
-      setError(err.response?.data?.message || 'Error carregant les clàusules.'),
+      setError(err.response?.data?.message || "No s'han pogut carregar les clàusules."),
     )
-  }, [])
+  }
+
+  useEffect(load, [])
+  useAppEvent(DATA_CHANGED, load)
 
   const rows = useMemo(() => payload?.data || [], [payload])
 
@@ -213,8 +228,8 @@ export default function Clauses() {
 
   const sortArrow = (key) => (sort.key === key ? (sort.direction === 'desc' ? ' ↓' : ' ↑') : '')
 
-  if (error) return <p className="text-bear">{error}</p>
-  if (!payload) return <p className="text-muted-foreground">Carregant…</p>
+  if (error && !payload) return <ErrorState message={error} onRetry={load} />
+  if (!payload) return <PageSkeleton cards={0} rows={8} />
 
   const recommended = rows.filter((r) => r.economicRecommendation === 'PAY_CLAUSE').sort((a, b) => b.clauseEconomicScore - a.clauseEconomicScore)
   const top = recommended[0] || null
@@ -226,8 +241,7 @@ export default function Clauses() {
         {rows.length} jugadors rivals amb clàusula analitzats · {recommended.length} amb recomanació de pagar
       </p>
       <p className="mt-1 text-xs text-muted-foreground">
-        Anàlisi purament econòmica: si la prima pagada avui es recuperaria amb l'evolució prevista del valor de mercat. No té en compte el
-        Fantasy Score ni la teva plantilla.
+        Només mira els diners: si el sobrecost que pagues avui es recuperaria amb la pujada prevista del valor. No mira si juga ni si el necessites.
       </p>
 
       {payload.available === false && (
@@ -260,8 +274,8 @@ export default function Clauses() {
               </span>
             </div>
             <p className="mt-2 text-sm text-muted-foreground">
-              ROI a 14 dies: <span className={`num font-semibold ${changeClass(top.roi14d)}`}>{formatPercent(top.roi14d * 100)}</span>
-              {' '}· Recupera la prima: <span className="font-semibold text-foreground">{breakEvenLabel(top.breakEvenDays)}</span>
+              Rendiment a 14 dies: <span className={`num font-semibold ${changeClass(top.roi14d)}`}>{formatPercent(top.roi14d * 100)}</span>
+              {' '}· Recupera el sobrecost: <span className="font-semibold text-foreground">{breakEvenLabel(top.breakEvenDays)}</span>
             </p>
             {!top.affordable && (
               <p className="mt-2 flex items-center gap-1.5 text-sm text-warn">
@@ -284,18 +298,18 @@ export default function Clauses() {
 
           <ScoreRing
             score={top.clauseEconomicScore}
-            title="Economic Score"
+            title="Valoració econòmica"
             tierLabel={CLASSIFICATION_LABELS[top.classification]}
             tierColor={CLASSIFICATION_RING_COLOR[top.classification]}
           />
 
           <div className="grid grid-cols-2 gap-3 lg:w-72">
             <div className="rounded-xl bg-info/10 p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-info/80">Economic Score</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-info/80">Valoració econòmica</p>
               <p className="mt-1 text-xl font-bold text-info">{top.clauseEconomicScore}/100</p>
             </div>
             <div className="rounded-xl border border-border p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Valor previst 14D</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Valor previst 14 dies</p>
               <p className="mt-1 text-xl font-bold">{formatMoneyM(top.expectedValue14d)}</p>
             </div>
             <Link
@@ -321,7 +335,7 @@ export default function Clauses() {
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Posició</p>
             <div className="flex gap-2">
               {POSITIONS.map((p) => (
-                <Pill key={p} active={position === p} onClick={() => setPosition(position === p ? null : p)}>
+                <Pill key={p} active={position === p} onClick={() => setFilter('position', position === p ? null : p)}>
                   {POSITION_LABELS[p]}
                 </Pill>
               ))}
@@ -331,111 +345,97 @@ export default function Clauses() {
           <div>
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Filtre</p>
             <div className="flex gap-2">
-              <Pill active={onlyRecommended} onClick={() => setOnlyRecommended((v) => !v)}>
+              <Pill active={onlyRecommended} onClick={() => setFilter('onlyRecommended', !onlyRecommended)}>
                 Només recomanades
               </Pill>
-              <Pill active={onlyLocked} onClick={() => setOnlyLocked((v) => !v)}>
+              <Pill active={onlyLocked} onClick={() => setFilter('onlyLocked', !onlyLocked)}>
                 Amagar desbloquejades
               </Pill>
             </div>
           </div>
         </div>
+        {filtersActive && (
+          <button onClick={clearFilters} className="mt-4 text-sm font-semibold text-primary hover:underline">
+            Treure filtres
+          </button>
+        )}
       </div>
 
       <div className="mt-4 hidden overflow-x-auto rounded-xl border border-border bg-surface md:block">
         <table className="w-full min-w-260 text-sm">
           <thead>
             <tr className="border-b border-border text-left text-xs uppercase text-muted-foreground">
-              <th
-                className="cursor-pointer select-none px-4 py-3 hover:text-foreground"
-                onClick={() => toggleSort('change24h')}
-                title="Pujada o baixada de valor de mercat en les últimes 24 hores, en euros"
-              >
-                24H{sortArrow('change24h')}
+              <th className="cursor-pointer select-none px-4 py-3 hover:text-foreground" onClick={() => toggleSort('change24h')}>
+                <span className="inline-flex items-center gap-1">
+                  24H{sortArrow('change24h')}
+                  <InfoTip>Pujada o baixada del valor de mercat en les últimes 24 hores, en euros. «*ext.» vol dir que la dada és de futbolfantasy.com (font externa, no oficial).</InfoTip>
+                </span>
               </th>
-              <th
-                className="cursor-pointer select-none px-4 py-3 hover:text-foreground"
-                onClick={() => toggleSort('player')}
-                title="Jugador rival amb clàusula de rescissió activa"
-              >
+              <th className="cursor-pointer select-none px-4 py-3 hover:text-foreground" onClick={() => toggleSort('player')}>
                 Jugador{sortArrow('player')}
               </th>
-              <th
-                className="cursor-pointer select-none px-4 py-3 hover:text-foreground"
-                onClick={() => toggleSort('position')}
-                title="Posició al camp"
-              >
+              <th className="cursor-pointer select-none px-4 py-3 hover:text-foreground" onClick={() => toggleSort('position')}>
                 Pos.{sortArrow('position')}
               </th>
-              <th
-                className="cursor-pointer select-none px-4 py-3 hover:text-foreground"
-                onClick={() => toggleSort('owner')}
-                title="Equip rival que té el jugador actualment"
-              >
-                Propietari{sortArrow('owner')}
+              <th className="cursor-pointer select-none px-4 py-3 hover:text-foreground" onClick={() => toggleSort('owner')}>
+                <span className="inline-flex items-center gap-1">
+                  Propietari{sortArrow('owner')}
+                  <InfoTip>Equip rival que té el jugador ara mateix.</InfoTip>
+                </span>
               </th>
-              <th
-                className="cursor-pointer select-none px-4 py-3 hover:text-foreground"
-                onClick={() => toggleSort('marketValue')}
-                title="Valor de mercat actual del jugador segons LaLiga Fantasy"
-              >
-                Valor{sortArrow('marketValue')}
+              <th className="cursor-pointer select-none px-4 py-3 hover:text-foreground" onClick={() => toggleSort('marketValue')}>
+                <span className="inline-flex items-center gap-1">
+                  Valor{sortArrow('marketValue')}
+                  <InfoTip>Valor de mercat actual del jugador segons LaLiga Fantasy.</InfoTip>
+                </span>
               </th>
-              <th
-                className="cursor-pointer select-none px-4 py-3 hover:text-foreground"
-                onClick={() => toggleSort('pctChange7d')}
-                title="Evolució del valor de mercat en els últims 7 dies (línia i percentatge). Font pròpia quan n'hi ha prou historial; si no, futbolfantasy.com (marcat amb *ext.)"
-              >
-                7D{sortArrow('pctChange7d')}
+              <th className="cursor-pointer select-none px-4 py-3 hover:text-foreground" onClick={() => toggleSort('pctChange7d')}>
+                <span className="inline-flex items-center gap-1">
+                  7D{sortArrow('pctChange7d')}
+                  <InfoTip>Evolució del valor en els últims 7 dies. Si encara no tenim prou historial propi, fem servir futbolfantasy.com (marcat amb *ext.).</InfoTip>
+                </span>
               </th>
-              <th
-                className="cursor-pointer select-none px-4 py-3 hover:text-foreground"
-                onClick={() => toggleSort('clauseValue')}
-                title="Import que hauries de pagar per rescindir la clàusula i fitxar el jugador"
-              >
-                Clàusula{sortArrow('clauseValue')}
+              <th className="cursor-pointer select-none px-4 py-3 hover:text-foreground" onClick={() => toggleSort('clauseValue')}>
+                <span className="inline-flex items-center gap-1">
+                  Clàusula{sortArrow('clauseValue')}
+                  <InfoTip>El que hauries de pagar per fitxar-lo pagant la clàusula.</InfoTip>
+                </span>
               </th>
-              <th
-                className="cursor-pointer select-none px-4 py-3 hover:text-foreground"
-                onClick={() => toggleSort('daysUntilUnlock')}
-                title="Dies que falten perquè la clàusula deixi d'estar blindada temporalment i es pugui pagar (informatiu, no afecta la recomanació)"
-              >
-                Desbloqueig{sortArrow('daysUntilUnlock')}
+              <th className="cursor-pointer select-none px-4 py-3 hover:text-foreground" onClick={() => toggleSort('daysUntilUnlock')}>
+                <span className="inline-flex items-center gap-1">
+                  Desbloqueig{sortArrow('daysUntilUnlock')}
+                  <InfoTip>Dies que falten perquè la clàusula es pugui pagar. És informatiu: no canvia la recomanació.</InfoTip>
+                </span>
               </th>
-              <th
-                className="cursor-pointer select-none px-4 py-3 hover:text-foreground"
-                onClick={() => toggleSort('premium')}
-                title="Diferència entre el preu de la clàusula i el valor de mercat actual: (clàusula − valor) / valor"
-              >
-                Prima{sortArrow('premium')}
+              <th className="cursor-pointer select-none px-4 py-3 hover:text-foreground" onClick={() => toggleSort('premium')}>
+                <span className="inline-flex items-center gap-1">
+                  Sobrecost{sortArrow('premium')}
+                  <InfoTip>Quant més car que el seu valor de mercat et surt pagar la clàusula: (clàusula − valor) / valor.</InfoTip>
+                </span>
               </th>
-              <th
-                className="cursor-pointer select-none px-4 py-3 hover:text-foreground"
-                onClick={() => toggleSort('roi14d')}
-                title="Retorn previst sobre el que pagaries per la clàusula, a 14 dies: (valor projectat a 14 dies − clàusula) / clàusula"
-              >
-                ROI 14D{sortArrow('roi14d')}
+              <th className="cursor-pointer select-none px-4 py-3 hover:text-foreground" onClick={() => toggleSort('roi14d')}>
+                <span className="inline-flex items-center gap-1">
+                  Rendiment 14d{sortArrow('roi14d')}
+                  <InfoTip>Quant guanyaries (o perdries) d'aquí a 14 dies sobre el que pagues: (valor previst a 14 dies − clàusula) / clàusula.</InfoTip>
+                </span>
               </th>
-              <th
-                className="cursor-pointer select-none px-4 py-3 hover:text-foreground"
-                onClick={() => toggleSort('breakEvenDays')}
-                title="Dies perquè el valor projectat del jugador arribi al preu de la clàusula (recuperis la prima pagada). «Sense recuperació» si no s'hi arriba en 30 dies"
-              >
-                Recuperació{sortArrow('breakEvenDays')}
+              <th className="cursor-pointer select-none px-4 py-3 hover:text-foreground" onClick={() => toggleSort('breakEvenDays')}>
+                <span className="inline-flex items-center gap-1">
+                  Recuperació{sortArrow('breakEvenDays')}
+                  <InfoTip>Dies que trigaria el valor del jugador a arribar al preu que pagues. «Sense recuperació» si no hi arriba en 30 dies.</InfoTip>
+                </span>
               </th>
-              <th
-                className="cursor-pointer select-none px-4 py-3 hover:text-foreground"
-                onClick={() => toggleSort('clauseEconomicScore')}
-                title="Clause Economic Score (0-100): combina el ROI a 14 dies i la rapidesa de recuperació de la prima. No té en compte el Fantasy Score ni la teva plantilla"
-              >
-                Score{sortArrow('clauseEconomicScore')}
+              <th className="cursor-pointer select-none px-4 py-3 hover:text-foreground" onClick={() => toggleSort('clauseEconomicScore')}>
+                <span className="inline-flex items-center gap-1">
+                  Valoració{sortArrow('clauseEconomicScore')}
+                  <InfoTip>Nota econòmica de 0 a 100: combina el rendiment a 14 dies i com de ràpid recuperes el sobrecost. No mira si juga ni si el necessites.</InfoTip>
+                </span>
               </th>
-              <th
-                className="cursor-pointer select-none px-4 py-3 hover:text-foreground"
-                onClick={() => toggleSort('economicRecommendation')}
-                title="Recomanació purament econòmica segons el Score: Pagar clàusula (≥75), A considerar (60-74), Esperar (40-59), No pagar (<40)"
-              >
-                Acció{sortArrow('economicRecommendation')}
+              <th className="cursor-pointer select-none px-4 py-3 hover:text-foreground" onClick={() => toggleSort('economicRecommendation')}>
+                <span className="inline-flex items-center gap-1">
+                  Acció{sortArrow('economicRecommendation')}
+                  <InfoTip>Recomanació segons la valoració: Pagar clàusula (75 o més), A considerar (60-74), Esperar (40-59), No pagar (menys de 40).</InfoTip>
+                </span>
               </th>
             </tr>
           </thead>
@@ -451,19 +451,16 @@ export default function Clauses() {
                     const eurDelta = own ?? row.externalTrend?.delta1d
                     if (eurDelta == null) return <span className="text-muted-foreground">—</span>
                     return (
-                      <span
-                        className={eurDelta > 0 ? 'text-bull' : eurDelta < 0 ? 'text-bear' : 'text-muted-foreground'}
-                        title={own == null ? 'Font externa (futbolfantasy.com, no oficial) — encara no tenim prou historial propi' : undefined}
-                      >
+                      <span className={eurDelta > 0 ? 'text-bull' : eurDelta < 0 ? 'text-bear' : 'text-muted-foreground'}>
                         {eurDelta >= 0 ? '↗' : '↘'} {formatDelta(eurDelta)}
-                        {own == null && <span className="text-[9px] text-muted-foreground"> *ext.</span>}
+                        {own == null && <span className="text-[11px] text-muted-foreground"> *ext.</span>}
                       </span>
                     )
                   })()}
                 </td>
                 <td className="px-4 py-3">
                   <Link to={`/players/${row.playerId}`} className="flex items-center gap-2.5 hover:text-primary">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted-foreground/15 text-[10px] font-bold text-muted-foreground">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted-foreground/15 text-[11px] font-bold text-muted-foreground">
                       {row.imageUrl ? <img src={row.imageUrl} alt="" className="h-full w-full object-cover" /> : initials(row.playerName)}
                     </div>
                     <div className="min-w-0">
@@ -479,14 +476,7 @@ export default function Clauses() {
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">{row.ownerTeamName || '—'}</td>
                 <td className="px-4 py-3 font-medium">{formatMoneyM(row.marketValue)}</td>
-                <td
-                  className="w-24 px-4 py-3"
-                  title={
-                    row.historySource === 'external'
-                      ? "Línia reconstruïda amb dades de futbolfantasy.com (no oficial) — encara no tenim prou historial propi"
-                      : undefined
-                  }
-                >
+                <td className="w-24 px-4 py-3">
                   <Sparkline data={row.history} />
                   {(() => {
                     const pct7d = row.trend?.pctChange7d ?? row.externalTrend?.pct7d
@@ -496,16 +486,14 @@ export default function Clauses() {
                         {row.historySource === 'external' && <span className="text-muted-foreground"> *ext.</span>}
                       </p>
                     ) : (
-                      row.historySource === 'external' && <span className="text-[9px] text-muted-foreground">*ext.</span>
+                      row.historySource === 'external' && <span className="text-[11px] text-muted-foreground">*ext.</span>
                     )
                   })()}
                 </td>
                 <td className="px-4 py-3 font-medium">
                   <span className="inline-flex items-center gap-1">
                     {formatMoneyM(row.clauseValue)}
-                    {(row.isLocked || row.isShielded) && (
-                      <ShieldIcon className="h-3.5 w-3.5 text-muted-foreground" title="Clàusula blindada" />
-                    )}
+                    {(row.isLocked || row.isShielded) && <ShieldIcon className="h-3.5 w-3.5 text-muted-foreground" aria-label="Clàusula blindada" />}
                   </span>
                 </td>
                 <td className="px-4 py-3">
@@ -520,20 +508,18 @@ export default function Clauses() {
                 <td className={`px-4 py-3 font-medium ${premiumClass(row.clausePremiumPct)}`}>
                   {row.clausePremiumPct !== null ? formatPercent(row.clausePremiumPct * 100) : '—'}
                 </td>
-                <td
-                  className={`px-4 py-3 font-medium ${changeClass(row.roi14d)}`}
-                  title={`Valor previst a 14 dies: ${formatMoneyM(row.expectedValue14d)}`}
-                >
+                <td className={`px-4 py-3 font-medium ${changeClass(row.roi14d)}`}>
                   {row.roi14d !== null ? formatPercent(row.roi14d * 100) : '—'}
+                  {row.expectedValue14d != null && (
+                    <span className="block text-[11px] font-normal text-muted-foreground">previst {formatMoneyM(row.expectedValue14d)}</span>
+                  )}
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">{breakEvenLabel(row.breakEvenDays)}</td>
                 <td className="px-4 py-3">
-                  <span
-                    className={`rounded-md px-2 py-1 text-xs font-bold ${scoreBadgeClass(row.clauseEconomicScore)}`}
-                    title={CLASSIFICATION_LABELS[row.classification]}
-                  >
+                  <span className={`rounded-md px-2 py-1 text-xs font-bold ${scoreBadgeClass(row.clauseEconomicScore)}`}>
                     {row.clauseEconomicScore}
                   </span>
+                  <span className="mt-1 block text-[11px] text-muted-foreground">{CLASSIFICATION_LABELS[row.classification]}</span>
                 </td>
                 <td className="px-4 py-3">
                   <span className="inline-flex items-center gap-1.5">
@@ -541,13 +527,18 @@ export default function Clauses() {
                       {ACTION_LABELS[row.economicRecommendation]}
                     </span>
                     {row.economicRecommendation === 'PAY_CLAUSE' && !row.affordable && (
-                      <WalletIcon className="h-3.5 w-3.5 text-warn" title="No tens prou capital disponible ara mateix" />
+                      <InfoTip label="Sense prou capital">
+                        <span className="flex items-center gap-1.5">
+                          <WalletIcon className="h-3.5 w-3.5 text-warn" /> Ara mateix no tens prou capital disponible per pagar-la.
+                        </span>
+                      </InfoTip>
                     )}
                     {row.economicRecommendation === 'PAY_CLAUSE' && row.isLocked && (
-                      <ShieldIcon
-                        className="h-3.5 w-3.5 text-warn"
-                        title={`Encara blindada ${row.daysUntilUnlock} ${row.daysUntilUnlock === 1 ? 'dia' : 'dies'} més`}
-                      />
+                      <InfoTip label="Clàusula blindada">
+                        <span className="flex items-center gap-1.5">
+                          <ShieldIcon className="h-3.5 w-3.5 text-warn" /> Encara blindada {row.daysUntilUnlock} {row.daysUntilUnlock === 1 ? 'dia' : 'dies'} més.
+                        </span>
+                      </InfoTip>
                     )}
                   </span>
                 </td>
@@ -556,9 +547,14 @@ export default function Clauses() {
           </tbody>
         </table>
         {sorted.length === 0 && (
-          <p className="p-6 text-center text-sm text-muted-foreground">
-            {rows.length === 0 ? 'Cap dada de clàusules disponible encara.' : 'Cap jugador amb aquests filtres.'}
-          </p>
+          <EmptyState
+            icon={SearchX}
+            className="m-4"
+            title={rows.length === 0 ? 'Encara no hi ha dades de clàusules' : 'Cap jugador amb aquests filtres'}
+            message={rows.length === 0 ? 'Apareixeran després de la propera sincronització.' : 'Prova de treure algun filtre.'}
+            actionLabel={filtersActive && rows.length > 0 ? 'Treure filtres' : undefined}
+            onAction={clearFilters}
+          />
         )}
       </div>
 
@@ -567,9 +563,14 @@ export default function Clauses() {
           <ClauseCard key={row.playerId + '-' + row.ownerTeamId} row={row} />
         ))}
         {sorted.length === 0 && (
-          <p className="panel p-6 text-center text-sm text-muted-foreground">
-            {rows.length === 0 ? 'Cap dada de clàusules disponible encara.' : 'Cap jugador amb aquests filtres.'}
-          </p>
+          <EmptyState
+            icon={SearchX}
+           
+            title={rows.length === 0 ? 'Encara no hi ha dades de clàusules' : 'Cap jugador amb aquests filtres'}
+            message={rows.length === 0 ? 'Apareixeran després de la propera sincronització.' : 'Prova de treure algun filtre.'}
+            actionLabel={filtersActive && rows.length > 0 ? 'Treure filtres' : undefined}
+            onAction={clearFilters}
+          />
         )}
       </div>
 

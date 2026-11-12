@@ -3,7 +3,9 @@
 namespace App\Services\FantasyApi;
 
 use App\Models\FantasyAccount;
+use App\Models\FantasyAlert;
 use App\Services\FantasyApi\Exceptions\FantasyApiAuthenticationException;
+use App\Services\Notifications\AlertService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -35,6 +37,8 @@ class FantasyAuthService
     public function getValidAccessToken(FantasyAccount $account): string
     {
         if (! $account->hasValidTokens()) {
+            $this->markSessionExpired($account);
+
             throw new FantasyApiAuthenticationException(
                 'No LaLiga Fantasy tokens configured for this account. Paste an access_token and refresh_token in Settings.'
             );
@@ -55,6 +59,8 @@ class FantasyAuthService
     public function refresh(FantasyAccount $account): void
     {
         if (blank($account->refresh_token)) {
+            $this->markSessionExpired($account);
+
             throw new FantasyApiAuthenticationException(
                 'The stored session has no refresh_token, and it can no longer be renewed automatically. Paste fresh tokens in Settings.'
             );
@@ -84,6 +90,8 @@ class FantasyAuthService
 
         if ($response->status() === 400 || $response->status() === 401) {
             Log::channel('fantasy_api')->warning('fantasy.auth.refresh.invalid_grant', ['account_id' => $account->id]);
+            $this->markSessionExpired($account);
+
             throw new FantasyApiAuthenticationException(
                 'The LaLiga Fantasy session has expired (invalid_grant). Paste fresh tokens in Settings.'
             );
@@ -111,6 +119,7 @@ class FantasyAuthService
             // B2C rotates the refresh token on every use; keep the old one if a new one wasn't issued.
             'refresh_token' => $body['refresh_token'] ?? $account->refresh_token,
             'token_expires_at' => $this->resolveExpiry($accessToken) ?? now()->addSeconds((int) $expiresIn),
+            'laliga_session_expired_at' => null,
         ])->save();
 
         Log::channel('fantasy_api')->info('fantasy.auth.refresh.success', ['account_id' => $account->id]);
@@ -137,6 +146,7 @@ class FantasyAuthService
             'refresh_token' => $refreshToken,
             'token_client_id' => null,
             'token_expires_at' => $expiresAt,
+            'laliga_session_expired_at' => null,
         ])->save();
     }
 
@@ -247,6 +257,7 @@ class FantasyAuthService
             'refresh_token' => $body['refresh_token'] ?? null,
             'token_client_id' => $clientId,
             'token_expires_at' => $this->resolveExpiry($accessToken) ?? now()->addSeconds((int) $expiresIn),
+            'laliga_session_expired_at' => null,
         ])->save();
 
         Log::channel('fantasy_api')->info('fantasy.auth.oauth.success', ['account_id' => $account->id]);
@@ -297,5 +308,27 @@ class FantasyAuthService
         }
 
         return Carbon::createFromTimestamp((int) $payload['exp']);
+    }
+
+    /**
+     * Remembers that LaLiga rejected this account's session for good, so the
+     * app can show one clear "reconnect" banner instead of every screen
+     * failing separately — and raises a single notification about it.
+     */
+    private function markSessionExpired(FantasyAccount $account): void
+    {
+        if ($account->laliga_session_expired_at !== null || ! $account->exists) {
+            return;
+        }
+
+        $account->forceFill(['laliga_session_expired_at' => now()])->saveQuietly();
+
+        app(AlertService::class)->notify(
+            $account,
+            FantasyAlert::TYPE_SESSION_EXPIRED,
+            'La sessió de LaLiga ha caducat',
+            "L'app no pot sincronitzar ni fer accions fins que tornis a connectar el compte.",
+            ['link' => '/onboarding', 'severity' => FantasyAlert::SEVERITY_CRITICAL, 'dedupe' => 'session-expired-'.now()->format('YmdHis')],
+        );
     }
 }

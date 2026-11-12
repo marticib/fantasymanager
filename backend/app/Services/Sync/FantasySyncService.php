@@ -3,6 +3,7 @@
 namespace App\Services\Sync;
 
 use App\Models\FantasyAccount;
+use App\Models\FantasyAlert;
 use App\Models\FantasyClub;
 use App\Models\FantasyLeague;
 use App\Models\FantasyMarketPlayer;
@@ -20,6 +21,7 @@ use App\Services\FantasyApi\FantasyLeagueService;
 use App\Services\FantasyApi\FantasyMarketService;
 use App\Services\FantasyApi\FantasyPlayerService;
 use App\Services\FantasyApi\FantasyTeamService;
+use App\Services\Notifications\AlertService;
 use App\Support\DataVersion;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -41,6 +43,7 @@ class FantasySyncService
         private readonly FantasyPlayerService $playerService,
         private readonly FantasyMarketService $marketService,
         private readonly SquadListingService $squadListingService,
+        private readonly AlertService $alerts,
     ) {}
 
     /**
@@ -412,6 +415,12 @@ class FantasySyncService
         $listings = $this->marketService->getMarket($account, $league->external_id);
         $clubNames = FantasyClub::pluck('name', 'external_id')->all();
         $seenPlayerIds = [];
+        $myTeamId = $account->active_team_id;
+        // Previous state, to notice what changed since the last sync.
+        $previous = FantasyMarketPlayer::where('fantasy_league_id', $league->id)
+            ->get(['fantasy_player_id', 'raw_payload', 'is_on_market'])
+            ->keyBy('fantasy_player_id');
+        $newOffers = [];
 
         foreach ($listings as $dto) {
             if (! $dto->playerExternalId) {
@@ -449,7 +458,19 @@ class FantasySyncService
             ]);
 
             $seenPlayerIds[] = $player->id;
+
+            if ($myTeamId && $sellerTeam?->id === $myTeamId) {
+                $before = $previous->get($player->id);
+                $offersBefore = ($before && $before->is_on_market) ? (int) ($before->raw_payload['numberOfOffers'] ?? 0) : 0;
+                $offersNow = (int) ($dto->raw['numberOfOffers'] ?? 0);
+
+                if ($offersNow > $offersBefore) {
+                    $newOffers[] = ['name' => $player->name, 'key' => ($dto->marketId ?? $player->id).':'.$offersNow];
+                }
+            }
         }
+
+        $this->notifyMarketChanges($account, $previous, $seenPlayerIds, $newOffers);
 
         FantasyMarketPlayer::where('fantasy_league_id', $league->id)
             ->whereNotIn('fantasy_player_id', $seenPlayerIds ?: [0])
@@ -458,6 +479,53 @@ class FantasySyncService
         DataVersion::bumpAccount($account->id);
 
         return count($listings);
+    }
+
+    /**
+     * One aggregated notification for new offers on your own listings, and
+     * one per auction you had bid on that has just closed (the listing left
+     * the market). LaLiga doesn't say who won from the market feed alone, so
+     * the auction one points to the team screen rather than guessing.
+     *
+     * @param  Collection<int, FantasyMarketPlayer>  $previous  keyed by fantasy_player_id
+     * @param  int[]  $seenPlayerIds
+     * @param  array<int, array{name: string, key: string}>  $newOffers
+     */
+    private function notifyMarketChanges(FantasyAccount $account, Collection $previous, array $seenPlayerIds, array $newOffers): void
+    {
+        if ($newOffers !== []) {
+            $names = collect($newOffers)->pluck('name');
+            $this->alerts->notify(
+                $account,
+                FantasyAlert::TYPE_OFFER_RECEIVED,
+                $names->count() === 1 ? "Nova oferta per {$names[0]}" : "Noves ofertes per {$names->count()} jugadors",
+                $names->count() === 1
+                    ? 'Entra a Vendes per acceptar-la o rebutjar-la.'
+                    : $names->take(5)->implode(', ').($names->count() > 5 ? '…' : '').'. Entra a Vendes per acceptar-les o rebutjar-les.',
+                ['link' => '/sales', 'dedupe' => 'offers-'.md5(collect($newOffers)->pluck('key')->sort()->implode('|'))],
+            );
+        }
+
+        $endedWithMyBid = $previous->filter(fn (FantasyMarketPlayer $m) => $m->is_on_market
+            && ! in_array($m->fantasy_player_id, $seenPlayerIds, true)
+            && data_get($m->raw_payload, 'bid.id'));
+
+        if ($endedWithMyBid->isEmpty()) {
+            return;
+        }
+
+        $names = FantasyPlayer::whereIn('id', $endedWithMyBid->keys())->pluck('name', 'id');
+
+        foreach ($endedWithMyBid as $playerId => $listing) {
+            $money = data_get($listing->raw_payload, 'bid.money');
+            $this->alerts->notify(
+                $account,
+                FantasyAlert::TYPE_AUCTION_ENDED,
+                'Ha acabat la subhasta de '.($names[$playerId] ?? 'un jugador'),
+                ($money ? 'Havies pujat '.number_format((int) $money, 0, ',', '.').' €. ' : '').'Mira El meu equip per veure si te l\'has endut.',
+                ['player_id' => $playerId, 'link' => '/team', 'dedupe' => 'auction-ended-'.(data_get($listing->raw_payload, 'id') ?? $playerId).'-'.data_get($listing->raw_payload, 'bid.id')],
+            );
+        }
     }
 
     private function syncStandings(FantasyAccount $account, FantasyLeague $league): void

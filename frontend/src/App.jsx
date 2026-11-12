@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './context/AuthContext'
 import Layout from './components/Layout'
 import Login from './pages/Login'
 import Register from './pages/Register'
+import { PageSkeleton } from './components/PageState'
 
 // One chunk per page: the first load only downloads the page being opened
 // (charts etc. come in with the pages that use them).
@@ -23,7 +24,7 @@ const RivalTeam = lazy(() => import('./pages/RivalTeam'))
 
 function RequireAuth({ children }) {
   const { token, loading } = useAuth()
-  if (loading) return <div className="p-10 text-text-muted">Carregant…</div>
+  if (loading) return <div className="p-6 sm:p-10"><PageSkeleton /></div>
   if (!token) return <Navigate to="/login" replace />
   return children
 }
@@ -39,7 +40,7 @@ export default function App() {
             path="/onboarding"
             element={
               <RequireAuth>
-                <Suspense fallback={<div className="p-10 text-text-muted">Carregant…</div>}>
+                <Suspense fallback={<div className="p-6 sm:p-10"><PageSkeleton /></div>}>
                   <Onboarding />
                 </Suspense>
               </RequireAuth>

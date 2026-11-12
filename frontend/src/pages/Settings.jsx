@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import apiClient from '../api/client'
+import { PageSkeleton } from '../components/PageState'
 
 const RULE_LABELS = {
   sell_daily_drop_threshold: 'Llindar de venda (variació diària, €)',
@@ -69,7 +70,7 @@ export default function Settings() {
     }
   }
 
-  if (!rules || !weights) return <p className="text-muted-foreground">Carregant…</p>
+  if (!rules || !weights) return <PageSkeleton cards={0} rows={5} />
 
   return (
     <div>
@@ -138,7 +139,7 @@ export default function Settings() {
         </section>
 
         <section className="rounded-2xl border border-border bg-surface p-6">
-          <h2 className="font-semibold">Pesos del Fantasy Score</h2>
+          <h2 className="font-semibold">Pesos de la puntuació</h2>
           <p className="mt-1 text-xs text-muted-foreground">Es normalitzen automàticament a 100.</p>
           <div className="mt-4 space-y-3">
             {Object.entries(weights).map(([key, value]) => (

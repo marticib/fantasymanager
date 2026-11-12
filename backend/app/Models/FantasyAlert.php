@@ -22,11 +22,25 @@ class FantasyAlert extends Model
 
     public const TYPE_RISK_OF_LOSS = 'RISK_OF_LOSS';
 
+    public const TYPE_AUCTION_ENDED = 'AUCTION_ENDED';
+
+    public const TYPE_CLAUSE_ORDER = 'CLAUSE_ORDER';
+
+    public const TYPE_SESSION_EXPIRED = 'SESSION_EXPIRED';
+
+    public const SEVERITY_INFO = 'INFO';
+
+    public const SEVERITY_WARNING = 'WARNING';
+
+    public const SEVERITY_CRITICAL = 'CRITICAL';
+
     protected $fillable = [
         'fantasy_account_id',
         'type',
         'title',
         'message',
+        'link',
+        'dedupe_key',
         'fantasy_player_id',
         'fantasy_recommendation_id',
         'severity',

@@ -5,7 +5,7 @@ function tier(score) {
   return { label: 'BAIX', color: 'var(--color-bear)' }
 }
 
-export default function ScoreRing({ score, size = 88, title = 'Fantasy Score', tierLabel, tierColor }) {
+export default function ScoreRing({ score, size = 88, title = 'Puntuació', tierLabel, tierColor }) {
   const fallback = tier(score)
   const label = tierLabel ?? fallback.label
   const color = tierColor ?? fallback.color

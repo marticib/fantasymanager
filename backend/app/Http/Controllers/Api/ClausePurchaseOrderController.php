@@ -88,7 +88,7 @@ class ClausePurchaseOrderController extends Controller
             return response()->json(['message' => $e->getMessage()], 422);
         }
 
-        return response()->json(['message' => 'Cancelled.']);
+        return response()->json(['message' => 'Ordre cancel·lada.']);
     }
 
     // A purchase order spends real money — ownership is checked explicitly

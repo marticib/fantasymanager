@@ -20,6 +20,7 @@ class FantasyAccount extends Model
         'refresh_token',
         'token_client_id',
         'token_expires_at',
+        'laliga_session_expired_at',
         'active_league_id',
         'active_team_id',
         'last_synced_at',
@@ -32,6 +33,7 @@ class FantasyAccount extends Model
             'access_token' => 'encrypted',
             'refresh_token' => 'encrypted',
             'token_expires_at' => 'datetime',
+            'laliga_session_expired_at' => 'datetime',
             'last_synced_at' => 'datetime',
         ];
     }

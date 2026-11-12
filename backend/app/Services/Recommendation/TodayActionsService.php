@@ -471,7 +471,7 @@ class TodayActionsService
 
         $title = match (true) {
             $category === 'watch' => null,
-            ! $chaseable => 'No perseguir la subhasta',
+            ! $chaseable => 'No val la pena pujar més',
             default => 'Oportunitat de compra',
         };
 
