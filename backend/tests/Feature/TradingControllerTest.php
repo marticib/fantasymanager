@@ -29,9 +29,9 @@ class TradingControllerTest extends TestCase
         return $this->api('/api/trading/make-money'.$query)->assertOk()->json('data');
     }
 
-    private function buildXi(string $query = ''): array
+    private function plans(string $query = ''): array
     {
-        return $this->api('/api/trading/build-xi'.$query)->assertOk()->json('data');
+        return $this->api('/api/trading/plans'.$query)->assertOk()->json('data');
     }
 
     // ---------------------------------------------------------------- common
@@ -39,14 +39,13 @@ class TradingControllerTest extends TestCase
     public function test_both_endpoints_require_authentication(): void
     {
         $this->getJson('/api/trading/make-money')->assertUnauthorized();
-        $this->getJson('/api/trading/build-xi')->assertUnauthorized();
+        $this->getJson('/api/trading/plans')->assertUnauthorized();
     }
 
     public function test_invalid_horizon_or_strategy_is_rejected(): void
     {
         $this->api('/api/trading/make-money?horizon=5')->assertStatus(422);
-        $this->api('/api/trading/build-xi?horizon=30')->assertStatus(422);
-        $this->api('/api/trading/build-xi?strategy=yolo')->assertStatus(422);
+        $this->api('/api/trading/make-money?horizon=30')->assertStatus(422);
     }
 
     public function test_the_response_carries_horizons_and_the_freshness_picture(): void
@@ -92,7 +91,7 @@ class TradingControllerTest extends TestCase
         $this->account->forceFill(['active_league_id' => null, 'active_team_id' => null])->save();
 
         $this->assertSame('NO_LEAGUE', $this->makeMoney()['state']);
-        $this->assertSame('NO_LEAGUE', $this->buildXi()['state']);
+        $this->assertSame('NO_LEAGUE', $this->plans()['state']);
     }
 
     public function test_the_response_is_cached_but_a_new_sync_stamp_busts_it(): void
@@ -301,16 +300,60 @@ class TradingControllerTest extends TestCase
         $this->assertSame([$p->id], array_column($data['movements'], 'playerId'));
     }
 
-    public function test_locked_clauses_are_reported_but_never_proposed(): void
+    public function test_a_clause_locked_beyond_the_horizon_is_reported_but_never_proposed(): void
     {
         $p = $this->player('Locked', 'FW', 10_000_000);
         $this->ffRising($p);
-        $this->clause($p, 10_500_000, ['clause_locked_until' => now()->addDays(2)]);
+        $this->clause($p, 10_500_000, ['clause_locked_until' => now()->addDays(5)]);
 
-        $data = $this->makeMoney();
+        $data = $this->makeMoney('?horizon=3');
 
         $this->assertSame('KEEP_CASH', $data['state']);
         $this->assertSame(['CLAUSE_LOCKED' => 1], $data['excluded']['counts']);
+    }
+
+    public function test_a_clause_unlocking_within_the_horizon_is_proposed_for_its_unlock_day(): void
+    {
+        $p = $this->player('Unlocks soon', 'FW', 10_000_000);
+        $this->ffRising($p);
+        $this->clause($p, 10_500_000, ['clause_locked_until' => now()->addDays(2)]);
+
+        $short = $this->makeMoney('?horizon=3');
+        $long = $this->makeMoney('?horizon=14');
+
+        $this->assertSame([$p->id], array_column($long['movements'], 'playerId'));
+        $this->assertSame('CLAUSE', $long['movements'][0]['type']);
+        $this->assertSame(2, $long['movements'][0]['payableInDays']);
+        $this->assertStringContainsString('es podrà pagar d\'aquí 2 dies', $long['movements'][0]['explanation']);
+        // 2 days to unlock still fits a 3-day horizon too.
+        $this->assertSame(2, $short['movements'][0]['payableInDays'] ?? null);
+    }
+
+    public function test_a_shielded_clause_is_never_proposed_whatever_the_horizon(): void
+    {
+        $p = $this->player('Shielded', 'FW', 10_000_000);
+        $this->ffRising($p);
+        $this->clause($p, 10_500_000, ['is_locked' => true]);
+
+        $this->assertSame('KEEP_CASH', $this->makeMoney('?horizon=14')['state']);
+    }
+
+    public function test_plans_returns_every_horizon_and_the_most_profitable_one(): void
+    {
+        $p = $this->player('Riser', 'FW', 10_000_000);
+        $this->ffRising($p);
+        $this->listing($p);
+
+        $data = $this->plans();
+
+        $this->assertSame('OK', $data['state']);
+        $this->assertSame(['3', '7', '14'], array_map('strval', array_keys($data['plans'])));
+        foreach ([3, 7, 14] as $h) {
+            $this->assertSame($h, $data['plans'][$h]['horizon']);
+            $this->assertSame($this->makeMoney('?horizon='.$h)['movements'], $data['plans'][$h]['movements']);
+        }
+        // A steadily rising player earns more the longer you hold him.
+        $this->assertSame(14, $data['bestHorizon']);
     }
 
     public function test_the_horizon_filter_changes_the_figures_without_changing_the_algorithm(): void
@@ -353,179 +396,13 @@ class TradingControllerTest extends TestCase
         $this->assertGreaterThan(0, $d['clausePct']);
     }
 
-    // -------------------------------------------------------------- Construir onze
-
-    public function test_build_xi_with_a_full_own_squad_costs_nothing(): void
-    {
-        $this->ownFullSquad();
-
-        $data = $this->buildXi('?strategy=min_cost');
-
-        $this->assertSame('ALREADY_HAVE_XI', $data['state']);
-        $this->assertCount(11, $data['lineup']);
-        $this->assertSame(0, $data['summary']['acquisitionCost']);
-        $this->assertSame(['OWN'], array_unique(array_column($data['lineup'], 'origin')));
-        $this->assertNull($data['summary']['newAcquisitionsRoi']);
-        $this->assertTrue($data['ownCanFillXi']);
-    }
-
-    public function test_build_xi_reports_a_missing_position_as_impossible(): void
-    {
-        foreach (['DF' => 5, 'MF' => 5, 'FW' => 3] as $position => $n) {
-            for ($i = 0; $i < $n; $i++) {
-                $this->own($this->player("{$position}{$i}", $position, 3_000_000));
-            }
-        }
-
-        $data = $this->buildXi();
-
-        $this->assertSame('IMPOSSIBLE_XI', $data['state']);
-        $this->assertSame('MISSING_POSITION', $data['impossible']['reason']);
-        $this->assertSame(['GK' => 1], $data['impossible']['missing']);
-        $this->assertSame([], $data['lineup']);
-    }
-
-    public function test_build_xi_completes_a_missing_position_from_the_market(): void
-    {
-        foreach (['DF' => 5, 'MF' => 5, 'FW' => 3] as $position => $n) {
-            for ($i = 0; $i < $n; $i++) {
-                $this->own($this->player("{$position}{$i}", $position, 3_000_000));
-            }
-        }
-        $gk = $this->player('Keeper', 'GK', 6_000_000);
-        $this->ffRising($gk);
-        $this->listing($gk);
-
-        $data = $this->buildXi('?strategy=min_cost');
-
-        $this->assertSame('OK', $data['state']);
-        $keeper = collect($data['lineup'])->firstWhere('playerId', $gk->id);
-        $this->assertSame('MARKET', $keeper['origin']);
-        $this->assertSame($keeper['cost'], $data['summary']['acquisitionCost']);
-        $this->assertSame(1, $data['summary']['counts']['market']);
-        $this->assertSame(10, $data['summary']['counts']['own']);
-        $this->assertStringContainsString('Puja recomanada', $keeper['explanation']);
-    }
-
-    public function test_build_xi_reports_insufficient_cash_with_the_minimum_needed(): void
-    {
-        $this->myTeam->update(['money' => 1_000_000]);
-        foreach (['DF' => 5, 'MF' => 5, 'FW' => 3] as $position => $n) {
-            for ($i = 0; $i < $n; $i++) {
-                $this->own($this->player("{$position}{$i}", $position, 3_000_000));
-            }
-        }
-        $gk = $this->player('Keeper', 'GK', 6_000_000);
-        $this->ffRising($gk);
-        $this->clause($gk, 7_000_000);
-
-        $data = $this->buildXi('?strategy=min_cost');
-
-        $this->assertSame('IMPOSSIBLE_XI', $data['state']);
-        $this->assertSame('INSUFFICIENT_CASH', $data['impossible']['reason']);
-        $this->assertSame(7_000_000, $data['impossible']['minimumCostToComplete']);
-        $this->assertSame(6_000_000, $data['impossible']['shortfall']);
-    }
-
-    public function test_the_balanced_strategy_keeps_the_reserve_but_the_others_may_spend_it(): void
-    {
-        $this->myTeam->update(['money' => 8_000_000]);
-        foreach (['DF' => 5, 'MF' => 5, 'FW' => 3] as $position => $n) {
-            for ($i = 0; $i < $n; $i++) {
-                $this->own($this->player("{$position}{$i}", $position, 3_000_000));
-            }
-        }
-        $gk = $this->player('Keeper', 'GK', 6_000_000);
-        $this->ffRising($gk);
-        $this->clause($gk, 7_000_000);
-
-        $balanced = $this->buildXi('?strategy=balanced');
-        $minCost = $this->buildXi('?strategy=min_cost');
-
-        $this->assertSame('IMPOSSIBLE_XI', $balanced['state'], '8M cash - 3M reserve = 5M < 7M clause');
-        $this->assertSame(5_000_000, $balanced['capital']['budget']);
-        $this->assertSame('OK', $minCost['state']);
-        $this->assertFalse($minCost['summary']['respectsReserve']);
-        $this->assertSame(1_000_000, $minCost['summary']['cashAfter']);
-    }
-
-    public function test_max_return_buys_a_profitable_player_over_a_free_own_one_and_splits_new_profit_from_owned_evolution(): void
-    {
-        foreach ($this->ownFullSquad() as $p) {
-            $this->ffRising($p); // every own player has an evolution
-        }
-        $fw = $this->player('Star', 'FW', 8_000_000);
-        $this->ffRising($fw);
-        $this->listing($fw);
-
-        $data = $this->buildXi('?strategy=max_return');
-
-        $this->assertSame('OK', $data['state']);
-        $star = collect($data['lineup'])->firstWhere('playerId', $fw->id);
-        $this->assertNotNull($star);
-        $this->assertSame($star['gain'], $data['summary']['newAcquisitionsProfit']);
-        $this->assertGreaterThan(0, $data['summary']['ownedEvolution']);
-        $this->assertNotSame($data['summary']['newAcquisitionsProfit'], $data['summary']['ownedEvolution']);
-        $this->assertSame(0, collect($data['lineup'])->where('origin', 'OWN')->first()['cost']);
-    }
-
-    public function test_the_min_cost_strategy_prefers_free_own_players_over_a_profitable_purchase(): void
-    {
-        foreach ($this->ownFullSquad() as $p) {
-            $this->ffRising($p);
-        }
-        $fw = $this->player('Star', 'FW', 8_000_000);
-        $this->ffRising($fw);
-        $this->listing($fw);
-
-        $data = $this->buildXi('?strategy=min_cost');
-
-        $this->assertSame('ALREADY_HAVE_XI', $data['state']);
-        $this->assertNull(collect($data['lineup'])->firstWhere('playerId', $fw->id));
-    }
-
-    public function test_own_players_without_futbolfantasy_data_still_fill_the_xi_with_a_null_evolution(): void
-    {
-        $this->ownFullSquad();
-
-        $data = $this->buildXi('?strategy=min_cost');
-
-        $this->assertNull($data['summary']['ownedEvolution']);
-        $this->assertSame(11, $data['summary']['ownedWithoutEvolution']);
-        $this->assertNull($data['lineup'][0]['gain']);
-    }
-
-    public function test_the_xi_uses_a_configured_formation_and_each_player_once(): void
-    {
-        $this->ownFullSquad();
-
-        $data = $this->buildXi();
-
-        $this->assertContains($data['formation'], array_keys(config('fantasy.trading.formations')));
-        $ids = array_column($data['lineup'], 'playerId');
-        $this->assertSame(count($ids), count(array_unique($ids)));
-        $this->assertContains(array_count_values(array_column($data['lineup'], 'position')), array_values(config('fantasy.trading.formations')));
-    }
-
-    public function test_build_xi_lists_excluded_candidates_with_their_reason(): void
-    {
-        $this->ownFullSquad();
-        $unknown = $this->player('Unknown', 'FW', 5_000_000);
-        $this->listing($unknown);
-
-        $data = $this->buildXi();
-
-        $this->assertSame(['NO_MATCH' => 1], $data['excluded']['counts']);
-        $this->assertSame($unknown->id, $data['excluded']['items'][0]['playerId']);
-    }
-
     public function test_the_matching_summary_reaches_the_response(): void
     {
         $this->ownFullSquad();
         $this->ffRising($matched = $this->player('Matched', 'FW', 5_000_000));
         $this->listing($matched);
 
-        $matching = $this->buildXi()['matching'];
+        $matching = $this->makeMoney()['matching'];
 
         $this->assertSame(1, $matching['matched']);
         $this->assertSame(15, $matching['noMatch']);
@@ -548,15 +425,13 @@ class TradingControllerTest extends TestCase
         }
 
         $start = microtime(true);
-        $money = $this->makeMoney();
-        $xi = $this->buildXi('?strategy=max_return');
+        $plans = $this->plans();
         $elapsed = microtime(true) - $start;
 
         $this->assertLessThan(8.0, $elapsed);
+        $money = $plans['plans'][14];
         $this->assertSame('OK', $money['state']);
-        $this->assertSame('OK', $xi['state']);
         $this->assertSame($money['movements'], $this->makeMoney()['movements']);
         $this->assertLessThanOrEqual(120_000_000, $money['summary']['capitalToInvest']);
-        $this->assertLessThanOrEqual(120_000_000, $xi['summary']['acquisitionCost']);
     }
 }

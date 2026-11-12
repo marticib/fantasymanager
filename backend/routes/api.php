@@ -70,7 +70,7 @@ Route::middleware(['auth:sanctum', 'bump.data'])->group(function () {
     Route::get('/recommendations/today', [RecommendationController::class, 'today']);
 
     // Trading & clauses (scaffolded now, fleshed out post-MVP)
-    Route::get('/trading/build-xi', [TradingController::class, 'buildXi']);
+    Route::get('/trading/plans', [TradingController::class, 'plans']);
     Route::get('/trading/make-money', [TradingController::class, 'makeMoney']);
     Route::get('/clauses/opportunities', [ClauseController::class, 'opportunities'])->middleware('cache.api');
 

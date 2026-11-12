@@ -5,8 +5,6 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\FantasyAccount;
 use App\Services\Recommendation\FantasySettingsService;
-use App\Services\Trading\BuildXiOptimizer;
-use App\Services\Trading\BuildXiService;
 use App\Services\Trading\MakeMoneyService;
 use App\Services\Trading\TradingFreshnessService;
 use Closure;
@@ -15,7 +13,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 
 /**
- * The Trading screen's two tabs. Thin on purpose: every calculation lives in
+ * The Trading screen ("make the most money in 3/7/14 days"). Thin on purpose: every calculation lives in
  * App\Services\Trading (which in turn reuses the market/clause economic
  * engines) — this only validates the query, caches, and attaches the
  * data-freshness picture the UI must show next to any recommendation.
@@ -27,21 +25,6 @@ class TradingController extends Controller
         private readonly FantasySettingsService $settings,
     ) {}
 
-    public function buildXi(Request $request, BuildXiService $service): JsonResponse
-    {
-        $account = $this->currentAccount($request);
-        $strategy = $request->query('strategy', 'balanced');
-
-        if (! in_array($strategy, BuildXiOptimizer::STRATEGIES, true)) {
-            return response()->json(['message' => 'Estratègia desconeguda.', 'allowed' => BuildXiOptimizer::STRATEGIES], 422);
-        }
-        if (($horizon = $this->horizon($request)) === null) {
-            return $this->invalidHorizon();
-        }
-
-        return $this->respond($account, 'build-xi', ['strategy' => $strategy, 'horizon' => $horizon], fn () => $service->build($account, $strategy, $horizon));
-    }
-
     public function makeMoney(Request $request, MakeMoneyService $service): JsonResponse
     {
         $account = $this->currentAccount($request);
@@ -52,6 +35,15 @@ class TradingController extends Controller
         $respectReserve = $request->boolean('respect_reserve', true);
 
         return $this->respond($account, 'make-money', ['horizon' => $horizon, 'reserve' => $respectReserve], fn () => $service->build($account, $horizon, $respectReserve));
+    }
+
+    /** The money-making plan for every horizon (3/7/14 days) in one response. */
+    public function plans(Request $request, MakeMoneyService $service): JsonResponse
+    {
+        $account = $this->currentAccount($request);
+        $respectReserve = $request->boolean('respect_reserve', true);
+
+        return $this->respond($account, 'plans', ['reserve' => $respectReserve], fn () => $service->buildAll($account, $respectReserve));
     }
 
     private function horizon(Request $request): ?int

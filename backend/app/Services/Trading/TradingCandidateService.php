@@ -19,7 +19,7 @@ use App\Services\Recommendation\ValueObjects\MarketBuyAnalysis;
 use Illuminate\Support\Carbon;
 
 /**
- * The single pool of economic candidates both Trading tabs optimize over:
+ * The single pool of economic candidates the Trading plans optimize over:
  * your own players (OWN), market listings (MARKET) and rival clauses
  * (CLAUSE). It owns no projection maths — every projection, profit, ROI,
  * MaxBid and recommended bid is read straight off MarketBuyAnalysisService /

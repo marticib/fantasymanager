@@ -461,25 +461,10 @@ return [
         // request and every source's last-sync stamp (so a new sync busts it).
         'cache_seconds' => (int) env('FANTASY_TRADING_CACHE_SECONDS', 60),
 
-        // ASSUMPTION: the project holds no formation rules (TeamController
-        // hardcodes 1-4-4-2). These are the shapes LaLiga Fantasy is commonly
-        // documented to accept; edit here if the league allows a different set.
-        // Positions use the app's own codes (GK/DF/MF/FW).
-        'formations' => [
-            '4-4-2' => ['GK' => 1, 'DF' => 4, 'MF' => 4, 'FW' => 2],
-            '4-3-3' => ['GK' => 1, 'DF' => 4, 'MF' => 3, 'FW' => 3],
-            '4-5-1' => ['GK' => 1, 'DF' => 4, 'MF' => 5, 'FW' => 1],
-            '3-4-3' => ['GK' => 1, 'DF' => 3, 'MF' => 4, 'FW' => 3],
-            '3-5-2' => ['GK' => 1, 'DF' => 3, 'MF' => 5, 'FW' => 2],
-            '5-3-2' => ['GK' => 1, 'DF' => 5, 'MF' => 3, 'FW' => 2],
-            '5-4-1' => ['GK' => 1, 'DF' => 5, 'MF' => 4, 'FW' => 1],
-        ],
-
         // Optimizer money grid (euros). Costs round UP and sale proceeds round
         // DOWN to it, so a plan is never over budget; the exact figures are
         // what get reported. Smaller = finer but slower.
         'capital_step' => [
-            'build_xi' => 100_000,
             'make_money' => 50_000,
         ],
 

@@ -19,6 +19,10 @@ use App\Models\FantasyAccount;
  * it pays for a better purchase or dodges an expected loss, and each player
  * (as a buy or a sell) appears at most once, so no capital is counted twice
  * and market/clause routes for the same player compete for the same money.
+ *
+ * A rival clause that is still locked today but unlocks before the horizon is
+ * a real option for that horizon (pay it on the unlock day, hold until the
+ * horizon): it competes for the same capital, flagged with `payableInDays`.
  */
 class MakeMoneyService
 {
@@ -36,12 +40,53 @@ class MakeMoneyService
             return ['state' => 'NO_LEAGUE', 'horizon' => $horizon, 'movements' => [], 'message' => 'Encara no hi ha cap lliga activa.'];
         }
 
+        return $this->plan($pool, $horizon, $respectReserve);
+    }
+
+    /**
+     * The best plan for every horizon (3/7/14 days) off one shared candidate
+     * pool, plus which horizon earns the most.
+     *
+     * @return array<string, mixed>
+     */
+    public function buildAll(FantasyAccount $account, bool $respectReserve = true): array
+    {
+        $pool = $this->candidates->pool($account);
+
+        if ($pool === null) {
+            return ['state' => 'NO_LEAGUE', 'plans' => [], 'bestHorizon' => null, 'message' => 'Encara no hi ha cap lliga activa.'];
+        }
+
+        $plans = [];
+        foreach (TradingCandidateService::HORIZONS as $horizon) {
+            $plans[$horizon] = $this->plan($pool, $horizon, $respectReserve);
+        }
+
+        $bestHorizon = null;
+        $bestGain = 0;
+        foreach ($plans as $horizon => $plan) {
+            $gain = $plan['summary']['netExpectedGain'] ?? null;
+            if ($gain !== null && $gain > $bestGain) {
+                $bestGain = $gain;
+                $bestHorizon = $horizon;
+            }
+        }
+
+        return ['state' => 'OK', 'plans' => $plans, 'bestHorizon' => $bestHorizon];
+    }
+
+    /**
+     * @param  array<string, mixed>  $pool  TradingCandidateService::pool()
+     * @return array<string, mixed>
+     */
+    private function plan(array $pool, int $horizon, bool $respectReserve): array
+    {
         $cash = $pool['cash'];
         $reserve = $respectReserve ? (int) $pool['rules']['minimum_cash_reserve'] : 0;
         $deployableCash = max(0, $cash - $reserve);
         $minProfit = max(1, (int) $pool['rules']['trading_minimum_expected_profit']);
 
-        $acquisitions = [...$pool['market'], ...$pool['clause']];
+        $acquisitions = [...$pool['market'], ...array_map(fn ($c) => $this->withUnlockWindow($c, $horizon), $pool['clause'])];
         $eligible = array_values(array_filter($acquisitions, fn ($c) => $c['eligible']));
         $excluded = array_values(array_filter($acquisitions, fn ($c) => ! $c['eligible']));
 
@@ -84,10 +129,25 @@ class MakeMoneyService
                 $buyRows[] = $c;
             }
         }
-        usort($buyRows, fn ($a, $b) => $b['profit'][$horizon] <=> $a['profit'][$horizon] ?: $a['playerId'] <=> $b['playerId']);
+        // Things to do today first, then clauses that only unlock later; best profit first within each.
+        usort($buyRows, fn ($a, $b) => ($a['payableInDays'] ?? 0) <=> ($b['payableInDays'] ?? 0)
+            ?: $b['profit'][$horizon] <=> $a['profit'][$horizon]
+            ?: $a['playerId'] <=> $b['playerId']);
         foreach ($buyRows as $c) {
             $view = $this->candidates->view($c, $horizon);
-            $movements[] = $view + ['type' => $c['source'] === 'CLAUSE' ? 'CLAUSE' : 'BUY', 'explanation' => TradingExplainer::forRow($c, $horizon, $c['source'])];
+            $explanation = TradingExplainer::forRow($c, $horizon, $c['source']);
+            if (($c['payableInDays'] ?? null) !== null) {
+                $explanation = sprintf(
+                    'Encara blindada: es podrà pagar d\'aquí %d %s, si el rival no puja la clàusula abans. ',
+                    $c['payableInDays'],
+                    $c['payableInDays'] === 1 ? 'dia' : 'dies',
+                ).$explanation;
+            }
+            $movements[] = $view + [
+                'type' => $c['source'] === 'CLAUSE' ? 'CLAUSE' : 'BUY',
+                'payableInDays' => $c['payableInDays'] ?? null,
+                'explanation' => $explanation,
+            ];
         }
         foreach ($movements as $i => &$m) {
             $m['step'] = $i + 1;
@@ -121,6 +181,30 @@ class MakeMoneyService
             'matching' => $pool['matching'],
             'explanations' => $this->planExplanations($summary, $hasBuys, $horizon),
         ];
+    }
+
+    /**
+     * A clause that is locked today but unlocks before the horizon can still
+     * be paid within it — same projected value at the horizon, same cost — so
+     * for this horizon it is a regular (later) option. Shielded clauses and
+     * ones unlocking at or after the horizon stay excluded.
+     *
+     * @param  array<string, mixed>  $candidate
+     * @return array<string, mixed>
+     */
+    private function withUnlockWindow(array $candidate, int $horizon): array
+    {
+        $days = $candidate['daysUntilUnlock'] ?? null;
+
+        if (($candidate['excludeReason'] ?? null) !== 'CLAUSE_LOCKED' || $days === null || $days >= $horizon || $candidate['profit'] === null) {
+            return $candidate;
+        }
+
+        if (($candidate['confidence']['score'] ?? 0) < (int) config('fantasy.trading.min_confidence_to_recommend')) {
+            return array_merge($candidate, ['excludeReason' => 'LOW_CONFIDENCE']);
+        }
+
+        return array_merge($candidate, ['eligible' => true, 'excludeReason' => null, 'payableInDays' => $days]);
     }
 
     /**
